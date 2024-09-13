@@ -82,6 +82,8 @@ class RecognitionModel(L.LightningModule):
         self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
+        self.nn.config.pad_token_id = self.nn.config.decoder.pad_token_id
+
         self.nn.train()
 
         #self.val_cer = CharErrorRate()
