@@ -1,5 +1,5 @@
 #
-# Copyright 2015 Benjamin Kiessling
+# Copyright 2024 Benjamin Kiessling
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,13 +37,6 @@ class RecognitionModel(L.LightningModule):
     """
     A LightningModule encapsulating the training setup for a text
     recognition model.
-
-    Setup parameters (load, training_data, evaluation_data, ....) are
-    named, model hyperparameters (everything in
-    `kraken.lib.default_specs.SEGMENTATION_HYPER_PARAMS`) are in in the
-    `hyper_params` argument.
-
-    Args:
     """
     def __init__(self,
                  num_classes: int,

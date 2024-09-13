@@ -34,6 +34,65 @@ logger = logging.getLogger('party')
 logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 
 
+@click.command('compile')
+@click.pass_context
+@click.option('-o', '--output', show_default=True, type=click.Path(), default='dataset.arrow', help='Output dataset file')
+@click.option('-F', '--files', show_default=True, default=None, multiple=True,
+              callback=_validate_manifests, type=click.File(mode='r', lazy=True),
+              help='File(s) with additional paths to training data.')
+@click.option('-u', '--normalization', show_default=True, type=click.Choice(['NFD', 'NFKD', 'NFC', 'NFKC']),
+              default=RECOGNITION_HYPER_PARAMS['normalization'], help='Ground truth normalization')
+@click.option('-n', '--normalize-whitespace/--no-normalize-whitespace', show_default=True,
+              default=RECOGNITION_HYPER_PARAMS['normalize_whitespace'], help='Normalizes unicode whitespace')
+@click.option('--reorder/--no-reorder', show_default=True, default=True, help='Reordering of code points to display order')
+@click.option('--base-dir', show_default=True, default='auto',
+              type=click.Choice(['L', 'R', 'auto']), help='Set base text '
+              'direction.  This should be set to the direction used during the '
+              'creation of the training data. If set to `auto` it will be '
+              'overridden by any explicit value given in the input files.')
+@click.option('--max-side-length', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['height'],
+              help='maximum length of longest side of image')
+@click.argument('ground_truth', nargs=-1, type=click.Path(exists=True, dir_okay=False))
+def compile(ctx, output, files, normalization, normalize_whitespace, reorder,
+            base_dir, max_side_length, ground_truth):
+    """
+    Precompiles a binary dataset from a collection of XML files.
+    """
+    from .util import message
+
+    ground_truth = list(ground_truth)
+
+    if files:
+        ground_truth.extend(files)
+
+    if not ground_truth:
+        raise click.UsageError('No training data was provided to the compile command. Use the `ground_truth` argument.')
+
+    if reorder and base_dir != 'auto':
+        reorder = base_dir
+
+    from party import dataset
+    from rich.progress import Progress
+
+    with Progress() as progress:
+        extract_task = progress.add_task('Compiling dataset', total=0, start=False, visible=True if not ctx.meta['verbose'] else False)
+
+        def _update_bar(advance, total):
+            if not progress.tasks[0].started:
+                progress.start_task(extract_task)
+            progress.update(extract_task, total=total, advance=advance)
+
+        dataset.compile(ground_truth,
+                        output,
+                        max_side_length=max_side_length,
+                        normalization=normalization,
+                        normalize_whitespace=normalize_whitespace,
+                        reorder=reorder,
+                        callback=_update_bar)
+
+    message(f'Output file written to {output}')
+
+
 @click.command('avg_ckpts')
 @click.pass_context
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='average.ckpt', help='Averaged model file path.')
@@ -181,16 +240,6 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
               show_default=True,
               default=RECOGNITION_HYPER_PARAMS['cos_min_lr'],
               help='Minimal final learning rate for cosine LR scheduler.')
-@click.option('-u', '--normalization', show_default=True, type=click.Choice(['NFD', 'NFKD', 'NFC', 'NFKC']),
-              default=RECOGNITION_HYPER_PARAMS['normalization'], help='Ground truth normalization')
-@click.option('-n', '--normalize-whitespace/--no-normalize-whitespace', show_default=True,
-              default=RECOGNITION_HYPER_PARAMS['normalize_whitespace'], help='Normalizes unicode whitespace')
-@click.option('--reorder/--no-reorder', show_default=True, default=True, help='Reordering of code points to display order')
-@click.option('--base-dir', show_default=True, default='auto',
-              type=click.Choice(['L', 'R', 'auto']), help='Set base text '
-              'direction.  This should be set to the direction used during the '
-              'creation of the training data. If set to `auto` it will be '
-              'overridden by any explicit value given in the input files.')
 @click.option('-t', '--training-files', show_default=True, default=None, multiple=True,
               callback=_validate_manifests, type=click.File(mode='r', lazy=True),
               help='File(s) with additional paths to training data')
