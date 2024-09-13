@@ -72,9 +72,11 @@ def compile(ctx, output, files, normalization, normalize_whitespace, reorder,
         reorder = base_dir
 
     from party import dataset
-    from rich.progress import Progress
+    from rich.progress import Progress, TimeElapsedColumn, MofNCompleteColumn
 
-    with Progress() as progress:
+    with Progress(*Progress.get_default_columns(),
+                  TimeElapsedColumn(),
+                  MofNCompleteColumn()) as progress:
         extract_task = progress.add_task('Compiling dataset', total=0, start=False, visible=True if not ctx.meta['verbose'] else False)
 
         def _update_bar(advance, total):
