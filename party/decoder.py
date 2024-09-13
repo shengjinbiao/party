@@ -171,7 +171,7 @@ class T5VisionDecoderModel(T5PreTrainedModel):
             encoder_hidden_states = encoder_hidden_states.repeat(input_ids.size(0), 1, 1)
 
         # add curve embeddings to encoder hidden states
-        if curves:
+        if curves is not None:
             curve_embeds = self.curve_embedding(curves).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
             encoder_hidden_states = encoder_hidden_states + curve_embeds
 
