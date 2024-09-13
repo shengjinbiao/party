@@ -43,6 +43,5 @@ RECOGNITION_HYPER_PARAMS = {'freq': 1.0,
                             'cos_t_max': 100,
                             'cos_min_lr': 3e-5,
                             'warmup': 35000,
-                            'freeze_encoder': 4000,
                             'height': 4000,
                             }

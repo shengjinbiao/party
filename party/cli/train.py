@@ -149,8 +149,6 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
               default=RECOGNITION_HYPER_PARAMS['weight_decay'], help='Weight decay')
 @click.option('--warmup', show_default=True, type=int,
               default=RECOGNITION_HYPER_PARAMS['warmup'], help='Number of steps to ramp up to `lrate` initial learning rate.')
-@click.option('--freeze-encoder', show_default=True, type=int,
-              default=RECOGNITION_HYPER_PARAMS['freeze_encoder'], help='Number of samples to keep the encoder frozen.')
 @click.option('--schedule',
               show_default=True,
               type=click.Choice(['constant',
@@ -208,7 +206,7 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
           min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
-          warmup, freeze_encoder, schedule, gamma, step_size, sched_patience,
+          warmup, schedule, gamma, step_size, sched_patience,
           cos_max, cos_min_lr, normalization, normalize_whitespace, reorder,
           base_dir, training_files, evaluation_files, workers, threads,
           augment, ground_truth):
@@ -248,7 +246,6 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
                          'momentum': momentum,
                          'weight_decay': weight_decay,
                          'warmup': warmup,
-                         'freeze_encoder': freeze_encoder,
                          'schedule': schedule,
                          'gamma': gamma,
                          'step_size': step_size,
@@ -322,10 +319,6 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
     cbs.append(checkpoint_callback)
     if not ctx.meta['verbose']:
         cbs.append(RichProgressBar(leave=True))
-
-    if freeze_encoder > 0:
-        from .util import FreezeEncoder
-        cbs.append(FreezeEncoder(freeze_encoder))
 
     trainer = Trainer(accelerator=accelerator,
                       devices=device,
