@@ -24,12 +24,13 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from transformers import T5Config
-from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.models.t5.modeling_t5 import T5PreTrainedModel, T5Stack
 
 logger = logging.getLogger(__name__)
 
 __all__ = ['T5VisionDecoderModel']
+
 
 class PromptEncoder(nn.Module):
     def __init__(self, embed_dim: int) -> None:
@@ -122,7 +123,7 @@ class T5VisionDecoderModel(T5PreTrainedModel):
                 output_attentions: Optional[bool] = None,
                 output_hidden_states: Optional[bool] = None,
                 return_dict: Optional[bool] = None,
-                curves: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
+                curves: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -208,11 +209,12 @@ class T5VisionDecoderModel(T5PreTrainedModel):
             output = (logits,) + decoder_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(loss=loss,
-                                      logits=logits,
-                                      past_key_values=decoder_outputs.past_key_values,
-                                      hidden_states=decoder_outputs.hidden_states,
-                                      attentions=decoder_outputs.attentions)
+        return CausalLMOutputWithCrossAttentions(loss=loss,
+                                                 logits=logits,
+                                                 past_key_values=decoder_outputs.past_key_values,
+                                                 hidden_states=decoder_outputs.hidden_states,
+                                                 attentions=decoder_outputs.attentions,
+                                                 cross_attentions=decoder_outputs.cross_attentions)
 
     def prepare_inputs_for_generation(
         self,
