@@ -21,6 +21,7 @@ import torch.nn.functional as F
 import numpy as np
 import lightning.pytorch as L
 
+import tempfile
 import pyarrow as pa
 
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
@@ -109,43 +110,47 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
 
     callback(0, len(files))
 
-    ds = []
-    for page in [XMLPage(file).to_container() for file in files]:
-        try:
-            im = Image.open(page.imagename)
-            im_size = im.size
-        except Exception:
-            continue
-        page_data = []
-        for line in page.lines:
-            text = line.text
-            for func in text_transforms:
-                text = func(text)
-            if not text:
-                logger.info(f'Text line "{line.text}" is empty after transformations')
-                continue
-            if not line.baseline:
-                logger.info('No baseline given for line')
-                continue
-            page_data.append(pa.scalar({'text': pa.scalar(codec.encode(text).numpy()),
-                                        'curve': _to_curve(line.baseline, im_size)},
-                                       line_struct))
-            num_lines += 1
-        if len(page_data) > 1:
-            # scale image only now
-            im = optional_resize(im, max_side_length)
-            fp = io.BytesIO()
-            im.save(fp, format='png')
-            ds.append(pa.scalar({'im': fp.getvalue(), 'lines': page_data}, page_struct))
-        callback(1, len(files))
-
-    metadata = {'num_lines': num_lines.to_bytes(4, 'little')}
-    schema = schema.with_metadata(metadata)
-
-    with pa.OSFile(output_file, 'wb') as sink:
-        with pa.ipc.new_file(sink, schema) as writer:
-            ar = pa.array(ds, page_struct)
-            writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
+    with tempfile.NamedTemporaryFile() as tmpfile:
+        with pa.OSFile(tmpfile, 'wb') as sink:
+            with pa.ipc.new_file(sink, schema) as writer:
+                for page in [XMLPage(file).to_container() for file in files]:
+                    try:
+                        im = Image.open(page.imagename)
+                        im_size = im.size
+                    except Exception:
+                        continue
+                    page_data = []
+                    for line in page.lines:
+                        text = line.text
+                        for func in text_transforms:
+                            text = func(text)
+                        if not text:
+                            logger.info(f'Text line "{line.text}" is empty after transformations')
+                            continue
+                        if not line.baseline:
+                            logger.info('No baseline given for line')
+                            continue
+                        page_data.append(pa.scalar({'text': pa.scalar(codec.encode(text).numpy()),
+                                                    'curve': _to_curve(line.baseline, im_size)},
+                                                   line_struct))
+                        num_lines += 1
+                    if len(page_data) > 1:
+                        # scale image only now
+                        im = optional_resize(im, max_side_length)
+                        fp = io.BytesIO()
+                        im.save(fp, format='png')
+                        ar = pa.array([pa.scalar({'im': fp.getvalue(), 'lines': page_data}, page_struct)], page_struct)
+                        writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
+                    callback(1, len(files))
+        with pa.memory_map(tmpfile, 'rb') as source:
+            metadata = {'num_lines': num_lines.to_bytes(4, 'little')}
+            schema = schema.with_metadata(metadata)
+            ds_table = pa.ipc.open_file(source).read_all()
+            new_table = ds_table.replace_schema_metadata(metadata)
+            with pa.OSFile(output_file, 'wb') as sink:
+                with pa.ipc.new_file(sink, schema=schema) as writer:
+                    batch = pa.record_batch([new_table], schema=schema)
+                    writer.write(batch)
 
 
 def _validation_worker_init_fn(worker_id):
