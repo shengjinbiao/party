@@ -20,15 +20,14 @@ import torch
 import logging
 import lightning.pytorch as L
 
-from torch import nn
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.utilities.memory import (garbage_collection_cuda,
                                                 is_oom_error)
 from torch.optim import lr_scheduler
-from torchmetrics.text import CharErrorRate, WordErrorRate
+#from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
-from transformers import Swinv2Model
+from transformers import VisionEncoderDecoderModel, Swinv2Model
 from party.decoder import T5VisionDecoderModel
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,7 @@ class RecognitionModel(L.LightningModule):
 
         self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
-        self.nn.config.decoder_start_token_id = model.config.pad_token_id
+        self.nn.config.decoder_start_token_id = self.nn.config.pad_token_id
         self.nn.train()
 
         #self.val_cer = CharErrorRate()
@@ -90,7 +89,7 @@ class RecognitionModel(L.LightningModule):
         self.val_mean = MeanMetric()
 
     def forward(self, x, curves):
-        return self.nn(pixel_values=x, decoder_curves=batch['curves'])
+        return self.nn(pixel_values=x, decoder_curves=curves)
 
     def _step(self, batch):
         try:
@@ -112,13 +111,6 @@ class RecognitionModel(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        #encoder_outputs = self.nn['encoder'](batch['image'], interpolate_pos_encoding=True).last_hidden_state
-        # TODO: make batching work, implement cache
-        #y_hat = self.nn['decoder'].generate(encoder_outputs, batch['curves'])
-        #pred = ''.join([x[0] for x in self.trainer.datamodule.val_codec.decode([(x, 0, 0, 0) for x in y_hat])])
-        #decoded_target = ''.join([x[0] for x in self.trainer.datamodule.val_codec.decode([(x, 0, 0, 0) for x in batch['target'][0]])])
-        #self.val_cer.update(pred, decoded_target)
-        #self.val_wer.update(pred, decoded_target)
         loss = self._step(batch)
         if loss:
             self.val_mean.update(loss)
