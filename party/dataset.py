@@ -149,8 +149,8 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             new_table = ds_table.replace_schema_metadata(metadata)
             with pa.OSFile(output_file, 'wb') as sink:
                 with pa.ipc.new_file(sink, schema=schema) as writer:
-                    batch = pa.record_batch([new_table], schema=schema)
-                    writer.write(batch)
+                    for batch in new_table.to_batches():
+                        writer.write(batch)
 
 
 def _validation_worker_init_fn(worker_id):
