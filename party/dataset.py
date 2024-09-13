@@ -111,7 +111,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     callback(0, len(files))
 
     with tempfile.NamedTemporaryFile() as tmpfile:
-        with pa.OSFile(tmpfile, 'wb') as sink:
+        with pa.OSFile(tmpfile.name, 'wb') as sink:
             with pa.ipc.new_file(sink, schema) as writer:
                 for page in [XMLPage(file).to_container() for file in files]:
                     try:
@@ -142,7 +142,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                         ar = pa.array([pa.scalar({'im': fp.getvalue(), 'lines': page_data}, page_struct)], page_struct)
                         writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
                     callback(1, len(files))
-        with pa.memory_map(tmpfile, 'rb') as source:
+        with pa.memory_map(tmpfile.name, 'rb') as source:
             metadata = {'num_lines': num_lines.to_bytes(4, 'little')}
             schema = schema.with_metadata(metadata)
             ds_table = pa.ipc.open_file(source).read_all()
