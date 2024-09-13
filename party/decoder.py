@@ -110,21 +110,19 @@ class T5VisionDecoderModel(T5PreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        decoder_curves: Optional[torch.FloatTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
+    def forward(self,
+                input_ids: Optional[torch.LongTensor] = None,
+                inputs_embeds: Optional[torch.FloatTensor] = None,
+                attention_mask: Optional[torch.FloatTensor] = None,
+                encoder_hidden_states: Optional[torch.FloatTensor] = None,
+                encoder_attention_mask: Optional[torch.FloatTensor] = None,
+                past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+                labels: Optional[torch.LongTensor] = None,
+                use_cache: Optional[bool] = None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                curves: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -164,17 +162,17 @@ class T5VisionDecoderModel(T5PreTrainedModel):
             input_ids = self._shift_right(labels)
 
         # check curves and decoder_input_id batch sizes match
-        if decoder_curves is not None and input_ids.size(0) != decoder_curves.size(0):
-            raise ValueError('input_ids and decoder_curves batch_size '
+        if curves is not None and input_ids.size(0) != curves.size(0):
+            raise ValueError('input_ids and curves batch_size '
                              f'needs to be equal ({input_ids.size[0]} '
-                             f'!= {decoder_curves.shape[0]})')
+                             f'!= {curves.shape[0]})')
         # expand encoder_hidden_states from (1, W, E) to (N, W, E) with N being the batch size of the tgt sequence.
         if encoder_hidden_states is not None:
             encoder_hidden_states = encoder_hidden_states.repeat(input_ids.size(0), 1, 1)
 
         # add curve embeddings to encoder hidden states
-        if decoder_curves:
-            curve_embeds = self.curve_embedding(decoder_curves).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
+        if curves:
+            curve_embeds = self.curve_embedding(curves).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
             encoder_hidden_states = encoder_hidden_states + curve_embeds
 
         # Decode
