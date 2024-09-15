@@ -298,7 +298,7 @@ class BinnedBaselineDataset(Dataset):
         for file in files:
             with pa.memory_map(file, 'rb') as source:
                 ds_table = pa.ipc.open_file(source).read_all()
-                raw_metadata = self.ds_table.schema.metadata
+                raw_metadata = ds_table.schema.metadata
                 if not raw_metadata or b'num_lines' not in raw_metadata:
                     raise ValueError(f'{file} does not contain a valid metadata record.')
                 if not self.arrow_table:
