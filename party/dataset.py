@@ -115,7 +115,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             with pa.ipc.new_file(sink, schema) as writer:
                 for page in [XMLPage(file).to_container() for file in files]:
                     try:
-                        im = Image.open(page.imagename).convert('RGB')
+                        im = Image.open(page.imagename)
                         im_size = im.size
                     except Exception:
                         continue
@@ -136,7 +136,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                         num_lines += 1
                     if len(page_data) > 1:
                         # scale image only now
-                        im = optional_resize(im, max_side_length)
+                        im = optional_resize(im, max_side_length).convert('RGB')
                         fp = io.BytesIO()
                         im.save(fp, format='png')
                         ar = pa.array([pa.scalar({'im': fp.getvalue(), 'lines': page_data}, page_struct)], page_struct)
