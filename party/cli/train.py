@@ -258,8 +258,7 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
 def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
           min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
           warmup, schedule, gamma, step_size, sched_patience,
-          cos_max, cos_min_lr, normalization, normalize_whitespace, reorder,
-          base_dir, training_files, evaluation_files, workers, threads,
+          cos_max, cos_min_lr, training_files, evaluation_files, workers, threads,
           augment, ground_truth):
     """
     Trains a model from image-text pairs.
@@ -303,8 +302,6 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
                          'rop_patience': sched_patience,
                          'cos_t_max': cos_max,
                          'cos_min_lr': cos_min_lr,
-                         'normalization': normalization,
-                         'normalize_whitespace': normalize_whitespace,
                          'augment': augment,
                          })
 
@@ -316,9 +313,6 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
 
     if len(ground_truth) == 0:
         raise click.UsageError('No training data was provided to the train command. Use `-t` or the `ground_truth` argument.')
-
-    if reorder and base_dir != 'auto':
-        reorder = base_dir
 
     try:
         accelerator, device = to_ptl_device(ctx.meta['device'])
@@ -335,10 +329,7 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
                                      height=hyper_params['height'],
                                      augmentation=augment,
                                      batch_size=batch_size,
-                                     num_workers=workers,
-                                     reorder=reorder,
-                                     normalization=hyper_params['normalization'],
-                                     normalize_whitespace=hyper_params['normalize_whitespace'])
+                                     num_workers=workers)
 
     if load:
         message('Loading model.')
