@@ -210,6 +210,7 @@ class TextLineDataModule(L.LightningDataModule):
     def __init__(self,
                  training_data: Union[str, 'PathLike'],
                  evaluation_data: Union[str, 'PathLike'],
+                 height: int = 4000,
                  augmentation: bool = False,
                  batch_size: int = 16,
                  num_workers: int = 8):
@@ -217,7 +218,8 @@ class TextLineDataModule(L.LightningDataModule):
 
         self.save_hyperparameters()
 
-        self.im_transforms = v2.Compose([v2.ToImage(),
+        self.im_transforms = v2.Compose([v2.Lambda(partial(optional_resize, max_size=height)),
+                                         v2.ToImage(),
                                          v2.ToDtype(torch.float32, scale=True),
                                          v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
 
