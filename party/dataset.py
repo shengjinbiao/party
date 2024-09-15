@@ -115,7 +115,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             with pa.ipc.new_file(sink, schema) as writer:
                 for page in [XMLPage(file).to_container() for file in files]:
                     try:
-                        im = Image.open(page.imagename)
+                        im = Image.open(page.imagename).convert('RGB')
                         im_size = im.size
                     except Exception:
                         continue
