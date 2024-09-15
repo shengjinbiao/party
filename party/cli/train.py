@@ -208,6 +208,7 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
 @click.option('-m', '--momentum', show_default=True, default=RECOGNITION_HYPER_PARAMS['momentum'], help='Momentum')
 @click.option('-w', '--weight-decay', show_default=True, type=float,
               default=RECOGNITION_HYPER_PARAMS['weight_decay'], help='Weight decay')
+@click.option('--gradient-clip-val', show_default=True, default=RECOGNITION_HYPER_PARAMS['gradient_clip_val'], help='Gradient clip value')
 @click.option('--warmup', show_default=True, type=int,
               default=RECOGNITION_HYPER_PARAMS['warmup'], help='Number of steps to ramp up to `lrate` initial learning rate.')
 @click.option('--schedule',
@@ -258,9 +259,10 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
           min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
-          warmup, schedule, gamma, step_size, sched_patience,
-          cos_max, cos_min_lr, training_files, evaluation_files, workers, threads,
-          augment, accumulate_grad_batches, ground_truth):
+          gradient_clip_val, warmup, schedule, gamma, step_size,
+          sched_patience, cos_max, cos_min_lr, training_files,
+          evaluation_files, workers, threads, augment, accumulate_grad_batches,
+          ground_truth):
     """
     Trains a model from image-text pairs.
     """
@@ -305,6 +307,7 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
                          'cos_min_lr': cos_min_lr,
                          'augment': augment,
                          'accumulate_grad_batches': accumulate_grad_batches,
+                         'gradient_clip_val': gradient_clip_val,
                          })
 
     ground_truth = list(ground_truth)
@@ -374,6 +377,7 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
                       enable_model_summary=False,
                       accumulate_grad_batches=hyper_params['accumulate_grad_batches'],
                       callbacks=cbs,
+                      gradient_clip_val=hyper_params['gradient_clip_val'],
                       **val_check_interval)
 
     with threadpool_limits(limits=threads):
