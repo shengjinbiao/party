@@ -255,7 +255,10 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
               show_default=True,
               default=RECOGNITION_HYPER_PARAMS['augment'],
               help='Enable image augmentation')
-@click.option('--accumulate-grad-batches', show default=True, default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'])
+@click.option('--accumulate-grad-batches',
+              show_default=True,
+              default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'],
+              help='Number of batches to accumulate gradient across.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
           min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
