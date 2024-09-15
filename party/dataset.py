@@ -25,7 +25,7 @@ import tempfile
 import pyarrow as pa
 
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
-                    Tuple, Union)
+                    Tuple, Union, Sequence)
 
 from party.codec import ByT5Codec
 
@@ -284,28 +284,35 @@ class BinnedBaselineDataset(Dataset):
                         come from a single page.
     """
     def __init__(self,
-                 path: 'PathLike',
+                 files: Sequence[Union[str, 'PathLike']],
                  im_transforms: Callable[[Any], torch.Tensor] = transforms.Compose([]),
                  augmentation: bool = False,
                  max_batch_size: int = 32) -> None:
-        self.path = path
+        self.files = files
         self.transforms = im_transforms
         self.aug = None
         self.max_batch_size = max_batch_size
 
-        with pa.memory_map(path, 'rb') as source:
-            self.ds_table = pa.ipc.open_file(source).read_all()
-            raw_metadata = self.ds_table.schema.metadata
-            if not raw_metadata or b'num_lines' not in raw_metadata:
-                raise ValueError(f'{path} does not contain a valid metadata record.')
-        self._len = int.from_bytes(raw_metadata[b'num_lines'], 'little')
+        self._len = 0
+
+        for file in files:
+            with pa.memory_map(file, 'rb') as source:
+                ds_table = pa.ipc.open_file(source).read_all()
+                raw_metadata = self.ds_table.schema.metadata
+                if not raw_metadata or b'num_lines' not in raw_metadata:
+                    raise ValueError(f'{file} does not contain a valid metadata record.')
+                if not self.arrow_table:
+                    self.arrow_table = ds_table
+                else:
+                    self.arrow_table = pa.concat_tables([self.arrow_table, ds_table])
+                self._len += int.from_bytes(raw_metadata[b'num_lines'], 'little')
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # just sample from a random page
         rng = np.random.default_rng()
-        idx = rng.integers(0, len(self.ds_table))
+        idx = rng.integers(0, len(self.arrow_table))
 
-        item = self.ds_table.column('pages')[idx].as_py()
+        item = self.arrow_table.column('pages')[idx].as_py()
         logger.debug(f'Attempting to load {item["im"]}')
         im, page_data = item['im'], item['lines']
         im = Image.open(io.BytesIO(im))
