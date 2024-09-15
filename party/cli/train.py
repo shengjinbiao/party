@@ -164,8 +164,8 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
 @click.option('-i', '--load', default=None, type=click.Path(exists=True), help='Checkpoint to load')
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='batch sample size')
-@click.option('--line-height', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['height'],
-              help='Input line height to network after scaling')
+@click.option('--max-side-length', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['height'],
+              help='maximum length of longest side of image')
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='model', help='Output model file')
 @click.option('-F', '--freq', show_default=True, default=RECOGNITION_HYPER_PARAMS['freq'], type=click.FLOAT,
               help='Model saving and report generation frequency in epochs '
@@ -254,12 +254,13 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
               show_default=True,
               default=RECOGNITION_HYPER_PARAMS['augment'],
               help='Enable image augmentation')
+@click.option('--accumulate-grad-batches', show default=True, default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'])
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
-def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
+def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
           min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
           warmup, schedule, gamma, step_size, sched_patience,
           cos_max, cos_min_lr, training_files, evaluation_files, workers, threads,
-          augment, ground_truth):
+          augment, accumulate_grad_batches, ground_truth):
     """
     Trains a model from image-text pairs.
     """
@@ -284,7 +285,7 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
 
     hyper_params = RECOGNITION_HYPER_PARAMS.copy()
     hyper_params.update({'freq': freq,
-                         'height': line_height,
+                         'height': max_side_length,
                          'batch_size': batch_size,
                          'quit': quit,
                          'epochs': epochs,
@@ -303,6 +304,7 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
                          'cos_t_max': cos_max,
                          'cos_min_lr': cos_min_lr,
                          'augment': augment,
+                         'accumulate_grad_batches': accumulate_grad_batches,
                          })
 
     ground_truth = list(ground_truth)
@@ -370,7 +372,7 @@ def train(ctx, load, batch_size, line_height, output, freq, quit, epochs,
                       enable_progress_bar=True if not ctx.meta['verbose'] else False,
                       deterministic=ctx.meta['deterministic'],
                       enable_model_summary=False,
-                      accumulate_grad_batches=4,
+                      accumulate_grad_batches=hyper_params['accumulate_grad_batches'],
                       callbacks=cbs,
                       **val_check_interval)
 

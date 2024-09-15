@@ -17,7 +17,7 @@ Default hyperparameters
 """
 
 RECOGNITION_HYPER_PARAMS = {'freq': 1.0,
-                            'batch_size': 32,
+                            'batch_size': 16,
                             'quit': 'fixed',
                             'epochs': 100,
                             'min_epochs': 10,
@@ -44,4 +44,5 @@ RECOGNITION_HYPER_PARAMS = {'freq': 1.0,
                             'cos_min_lr': 5e-6,
                             'warmup': 1000,
                             'height': 4000,
+                            'accumulate_grad_batches': 4
                             }
