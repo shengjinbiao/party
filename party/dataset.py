@@ -295,6 +295,8 @@ class BinnedBaselineDataset(Dataset):
 
         self._len = 0
 
+        self.arrow_table = None
+
         for file in files:
             with pa.memory_map(file, 'rb') as source:
                 ds_table = pa.ipc.open_file(source).read_all()
