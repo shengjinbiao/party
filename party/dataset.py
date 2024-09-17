@@ -113,8 +113,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     with tempfile.NamedTemporaryFile() as tmpfile:
         with pa.OSFile(tmpfile.name, 'wb') as sink:
             with pa.ipc.new_file(sink, schema) as writer:
-                for page in [XMLPage(file).to_container() for file in files]:
+                for file in files:
                     try:
+                        page = XMLPage(file).to_container()
                         im = Image.open(page.imagename)
                         im_size = im.size
                     except Exception:
