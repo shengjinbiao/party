@@ -122,19 +122,22 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                         continue
                     page_data = []
                     for line in page.lines:
-                        text = line.text
-                        for func in text_transforms:
-                            text = func(text)
-                        if not text:
-                            logger.info(f'Text line "{line.text}" is empty after transformations')
+                        try:
+                            text = line.text
+                            for func in text_transforms:
+                                text = func(text)
+                            if not text:
+                                logger.info(f'Text line "{line.text}" is empty after transformations')
+                                continue
+                            if not line.baseline:
+                                logger.info('No baseline given for line')
+                                continue
+                            page_data.append(pa.scalar({'text': pa.scalar(codec.encode(text).numpy()),
+                                                        'curve': _to_curve(line.baseline, im_size)},
+                                                       line_struct))
+                            num_lines += 1
+                        except Exception:
                             continue
-                        if not line.baseline:
-                            logger.info('No baseline given for line')
-                            continue
-                        page_data.append(pa.scalar({'text': pa.scalar(codec.encode(text).numpy()),
-                                                    'curve': _to_curve(line.baseline, im_size)},
-                                                   line_struct))
-                        num_lines += 1
                     if len(page_data) > 1:
                         # scale image only now
                         im = optional_resize(im, max_side_length).convert('RGB')
