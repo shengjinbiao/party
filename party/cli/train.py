@@ -339,24 +339,6 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
                                      batch_size=batch_size,
                                      num_workers=workers)
 
-    if load:
-        message('Loading model.')
-        model = RecognitionModel.load_from_checkpoint(load,
-                                                      num_classes=data_module.num_classes,
-                                                      map_location=torch.device('cpu'),
-                                                      pad_id=data_module.pad_id,
-                                                      sos_id=data_module.sos_id,
-                                                      eos_id=data_module.eos_id,
-                                                      **hyper_params)
-
-    else:
-        message('Initializing model.')
-        model = RecognitionModel(**hyper_params,
-                                 num_classes=data_module.num_classes,
-                                 pad_id=data_module.pad_id,
-                                 sos_id=data_module.sos_id,
-                                 eos_id=data_module.eos_id)
-
     cbs = [RichModelSummary(max_depth=2)]
 
     checkpoint_callback = ModelCheckpoint(dirpath=output,
@@ -382,6 +364,24 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
                       callbacks=cbs,
                       gradient_clip_val=hyper_params['gradient_clip_val'],
                       **val_check_interval)
+
+    with trainer.init_module():
+        if load:
+            message('Loading model.')
+            model = RecognitionModel.load_from_checkpoint(load,
+                                                          num_classes=data_module.num_classes,
+                                                          pad_id=data_module.pad_id,
+                                                          sos_id=data_module.sos_id,
+                                                          eos_id=data_module.eos_id,
+                                                          **hyper_params)
+
+        else:
+            message('Initializing model.')
+            model = RecognitionModel(**hyper_params,
+                                     num_classes=data_module.num_classes,
+                                     pad_id=data_module.pad_id,
+                                     sos_id=data_module.sos_id,
+                                     eos_id=data_module.eos_id)
 
     with threadpool_limits(limits=threads):
         trainer.fit(model, data_module)
