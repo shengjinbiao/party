@@ -104,7 +104,7 @@ class RecognitionModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         try:
-            outputs = self.nn.generate(pixel_values=batch['image'],
+            outputs = self.nn.generate(inputs=batch['image'],
                                        decoder_curves=batch['curves'])
             preds = self.tokenizer.decode(outputs.sequences)
             labels = self.tokenizer.decode(batch['target'])
