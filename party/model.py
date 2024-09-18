@@ -24,10 +24,9 @@ from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.utilities.memory import (garbage_collection_cuda,
                                                 is_oom_error)
 from torch.optim import lr_scheduler
-#from torchmetrics.text import CharErrorRate, WordErrorRate
-from torchmetrics.aggregation import MeanMetric
+from torchmetrics.text import CharErrorRate, WordErrorRate
 
-from transformers import VisionEncoderDecoderModel, Swinv2Model
+from transformers import VisionEncoderDecoderModel, Swinv2Model, ByT5Tokenizer
 from party.decoder import T5VisionDecoderModel
 
 logger = logging.getLogger(__name__)
@@ -79,55 +78,62 @@ class RecognitionModel(L.LightningModule):
 
         self.nn.train()
 
-        #self.val_cer = CharErrorRate()
-        #self.val_wer = WordErrorRate()
-        self.val_mean = MeanMetric()
+        self.tokenizer = ByT5Tokenizer()
+
+        self.val_cer = CharErrorRate()
+        self.val_wer = WordErrorRate()
 
     def forward(self, x, curves):
         return self.nn(pixel_values=x, decoder_curves=curves)
 
-    def _step(self, batch):
+    def training_step(self, batch, batch_idx):
         try:
             output = self.nn(pixel_values=batch['image'],
                              labels=batch['target'],
                              decoder_curves=batch['curves'])
-            return output.loss
         except RuntimeError as e:
             if is_oom_error(e):
                 logger.warning('Out of memory error in trainer. Skipping batch and freeing caches.')
                 garbage_collection_cuda()
+                return
+            else:
+                raise
+        if output.loss:
+            self.log('train_loss', output.loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        return output.loss
+
+    def validation_step(self, batch, batch_idx):
+        try:
+            outputs = self.nn.generate(pixel_values=batch['image'],
+                                       decoder_curves=batch['curves'])
+            preds = self.tokenizer.decode(outputs.sequences)
+            labels = self.tokenizer.decode(batch['target'])
+            self.val_cer.update(preds, labels)
+            self.val_wer.update(preds, labels)
+        except RuntimeError as e:
+            if is_oom_error(e):
+                logger.warning('Out of memory error in trainer. Skipping batch and freeing caches.')
+                garbage_collection_cuda()
+                return
             else:
                 raise
 
-    def training_step(self, batch, batch_idx):
-        loss = self._step(batch)
-        if loss:
-            self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        loss = self._step(batch)
-        if loss:
-            self.val_mean.update(loss)
-        return loss
-
     def on_validation_epoch_end(self):
-        #accuracy = 1.0 - self.val_cer.compute()
-        #word_accuracy = 1.0 - self.val_wer.compute()
+        accuracy = 1.0 - self.val_cer.compute()
+        word_accuracy = 1.0 - self.val_wer.compute()
 
-        #if accuracy > self.best_metric:
-        #    logger.debug(f'Updating best metric from {self.best_metric} ({self.best_epoch}) to {accuracy} ({self.current_epoch})')
-        #    self.best_epoch = self.current_epoch
-        #    self.best_metric = accuracy
-        #logger.info(f'validation run: total chars {self.val_cer.total} errors {self.val_cer.errors} accuracy {accuracy}')
-        #self.log('val_accuracy', accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        #self.log('val_word_accuracy', word_accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        self.val_mean.reset()
+        if accuracy > self.best_metric:
+            logger.debug(f'Updating best metric from {self.best_metric} ({self.best_epoch}) to {accuracy} ({self.current_epoch})')
+            self.best_epoch = self.current_epoch
+            self.best_metric = accuracy
+        logger.info(f'validation run: total chars {self.val_cer.total} errors {self.val_cer.errors} accuracy {accuracy}')
+        self.log('val_accuracy', accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_word_accuracy', word_accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_metric', accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True)
 
-        #self.val_cer.reset()
-        #self.val_wer.reset()
+        self.val_cer.reset()
+        self.val_wer.reset()
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         """
