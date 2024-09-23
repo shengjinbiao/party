@@ -27,8 +27,6 @@ import pyarrow as pa
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
                     Tuple, Union, Sequence)
 
-from party.codec import ByT5Codec
-
 from functools import partial
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
@@ -42,6 +40,8 @@ from torchvision.transforms import v2
 
 from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
+
+from party.codec import ByT5Codec
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -312,6 +312,10 @@ class BinnedBaselineDataset(Dataset):
                 else:
                     self.arrow_table = pa.concat_tables([self.arrow_table, ds_table])
                 self._len += int.from_bytes(raw_metadata[b'num_lines'], 'little')
+
+        if augmentation:
+            from party.augmentation import DefaultAugmenter
+            self.aug = DefaultAugmenter()
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # just sample from a random page

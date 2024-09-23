@@ -31,7 +31,7 @@ RECOGNITION_HYPER_PARAMS = {'freq': 1.0,
                             'normalization': None,
                             'normalize_whitespace': True,
                             'completed_epochs': 0,
-                            'augment': False,
+                            'augment': True,
                             # lr scheduler params
                             # step/exp decay
                             'step_size': 10,

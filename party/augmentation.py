@@ -24,10 +24,8 @@ class DefaultAugmenter:
     def __init__(self):
         import cv2
         cv2.setNumThreads(0)
-        from albumentations import (Blur, Compose, ElasticTransform,
-                                    MedianBlur, MotionBlur, OneOf,
-                                    OpticalDistortion, PixelDropout,
-                                    ShiftScaleRotate, ToFloat, ColorJitter)
+        from albumentations import (Blur, Compose, MedianBlur, MotionBlur,
+                                    OneOf, PixelDropout, ToFloat, ColorJitter)
 
         self._transforms = Compose([
                                     ToFloat(),
