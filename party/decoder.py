@@ -33,38 +33,69 @@ __all__ = ['T5VisionDecoderModel']
 
 
 class PromptEncoder(nn.Module):
-    def __init__(self, embed_dim: int) -> None:
-        """
-        Encoder for quadratic Bézier curve prompts for decoder.
+    """
+    Encodes prompts for input to party's decoder.
 
-        Args:
-            embed_dim: The prompts' embedding dimension. Needs to be divisible
-            by 8.
-        """
+    Args:
+        embed_dim: The prompts' embedding dimension. Needs to be divisible
+        by 8.
+    """
+    def __init__(self, embed_dim: int) -> None:
         super().__init__()
         self.embed_dim = embed_dim
+        # 4 curve points + 2 bbox corners, box center, box extents
+        self.point_embeddings = nn.ModuleList(nn.Embedding(1, embed_dim // 4) for i in range(9))
         self.register_buffer("positional_encoding_gaussian_matrix", torch.randn((2, embed_dim // 8)))
 
-    def forward(self, curves: torch.Tensor) -> torch.Tensor:
-        """
-        Embeds a quadratic Bézier curve.
-
-        Args:
-          curves: point coordinates of shape (B, 4, 2)
-
-        Returns:
-          Embeddings for the points with shape (B, E)
-        """
-        bs = curves.shape[0]
-
-        coords = curves.clone()
+    def _positional_embed(self, coords):
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coords = 2 * coords - 1
         coords = coords.to(self.positional_encoding_gaussian_matrix.dtype)
         coords = coords @ self.positional_encoding_gaussian_matrix
         coords = 2 * torch.pi * coords
         # outputs d_1 x ... x d_n x C shape
-        return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1).view(bs, -1)
+        return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1)
+
+    def _embed_curves(self, curves: torch.FloatTensor):
+        point_embedding = self._positional_embed(points)
+        point_embedding[:, 0, :] += self.point_embeddings[0].weight
+        point_embedding[:, 1, :] += self.point_embeddings[1].weight
+        point_embedding[:, 2, :] += self.point_embeddings[2].weight
+        point_embedding[:, 3, :] += self.point_embeddings[3].weight
+        return point_embedding.view(points.shape[0], -1)
+
+    def _embed_boxes(self, boxes: torch.FloatTensor):
+        corner_embedding = self._positional_embed(boxes)
+        corner_embedding[:, 0, :] += self.point_embeddings[4].weight
+        corner_embedding[:, 1, :] += self.point_embeddings[5].weight
+        corner_embedding[:, 2, :] += self.point_embeddings[6].weight
+        corner_embedding[:, 3, :] += self.point_embeddings[7].weight
+        return corner_embedding.view(boxes.shape[0], -1)
+
+    def forward(self,
+                curves: Optional[torch.FloatTensor] = None,
+                boxes: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+        """
+        Embeds different types of prompts, either quadratic Bézier curves or
+        bounding boxes.
+
+        Args:
+          curves: Normalized point coordinates of shape (B_1, 4, 2)
+          boxes: Normalized bounding box corner coordinates of shape (B_2, 4, 2)
+
+        Returns:
+          Embeddings for the points with shape (B_1+B_2, E)
+        """
+        embeddings = torch.empty((0, self.embed_dim),
+                                 device=self.point_embeddings[0].weight.device)
+        if curves is not None:
+            curve_embeddings = self._embed_curves(curves)
+            embeddings = torch.cat([embeddings, curve_embeddings])
+        if boxes is not None:
+            box_embeddings = self._embed_boxes(boxes)
+            embeddings = torch.cat([embeddings, box_embeddings])
+
+        return embeddings
 
 
 class T5VisionDecoderModel(T5PreTrainedModel):
@@ -83,8 +114,8 @@ class T5VisionDecoderModel(T5PreTrainedModel):
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = T5Stack(decoder_config, self.shared)
 
-        # Positional embedding for quadratic Bézier curves
-        self.curve_embedding = PromptEncoder(config.d_model)
+        # Positional embedding for lines
+        self.line_embedding = PromptEncoder(config.d_model)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -123,7 +154,8 @@ class T5VisionDecoderModel(T5PreTrainedModel):
                 output_attentions: Optional[bool] = None,
                 output_hidden_states: Optional[bool] = None,
                 return_dict: Optional[bool] = None,
-                curves: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithCrossAttentions]:
+                curves: Optional[torch.FloatTensor] = None,
+                boxes: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -162,19 +194,14 @@ class T5VisionDecoderModel(T5PreTrainedModel):
             # get decoder inputs from shifting lm labels to the right
             input_ids = self._shift_right(labels)
 
-        # check curves and decoder_input_id batch sizes match
-        if curves is not None and input_ids.size(0) != curves.size(0):
-            raise ValueError('input_ids and curves batch_size '
-                             f'needs to be equal ({input_ids.size[0]} '
-                             f'!= {curves.shape[0]})')
         # expand encoder_hidden_states from (1, W, E) to (N, W, E) with N being the batch size of the tgt sequence.
         if encoder_hidden_states is not None:
             encoder_hidden_states = encoder_hidden_states.repeat(input_ids.size(0), 1, 1)
 
-        # add curve embeddings to encoder hidden states
-        if curves is not None:
-            curve_embeds = self.curve_embedding(curves).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
-            encoder_hidden_states = encoder_hidden_states + curve_embeds
+        # add line embeddings to encoder hidden states
+        if curves is not None or boxes is not None:
+            line_embeds = self.line_embedding(curves=curves, boxes=boxes).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
+            encoder_hidden_states = encoder_hidden_states + line_embeds
 
         # Decode
         decoder_outputs = self.decoder(input_ids=input_ids,
