@@ -104,7 +104,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     text_transforms: List[Callable[[str], str]] = []
 
     # pyarrow structs
-    line_struct = pa.struct([('text', pa.list_(pa.int32())), ('curve', pa.list_(pa.float32()))])
+    line_struct = pa.struct([('text', pa.list_(pa.int32())),
+                             ('curve', pa.list_(pa.float32())),
+                             ('bbox', pa.list_(pa.float32()))])
     page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
 
     codec = ByT5Codec()
