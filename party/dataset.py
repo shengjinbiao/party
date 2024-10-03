@@ -67,6 +67,21 @@ def _to_curve(baseline, im_size, min_points: int = 8) -> torch.Tensor:
     return pa.scalar(curve, type=pa.list_(pa.float32()))
 
 
+def _to_bbox(boundary, im_size) -> torch.Tensor:
+    """
+    Converts a bounding polygon to a bbox in xyxyc_xc_yhw format.
+    """
+    flat_box = [point for pol in boxes for point in boundary]
+    flat_box = [x for point in flat_box for x in point]
+    xmin, xmax = min(flat_box[::2]), max(flat_box[::2])
+    ymin, ymax = min(flat_box[1::2]), max(flat_box[1::2])
+    w = xmax - xmin
+    h = ymax - ymin
+    cx = (xmin + xmax) / 2
+    cy = (ymin + ymax) / 2
+    return pa.scalar([xmin, ymin, xmax, ymax, cx, cy, w, h], type=pa.list_(pa.float32()))
+
+
 def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             output_file: Union[str, 'PathLike'] = None,
             max_side_length: int = 4000,
@@ -133,7 +148,8 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                                 logger.info('No baseline given for line')
                                 continue
                             page_data.append(pa.scalar({'text': pa.scalar(codec.encode(text).numpy()),
-                                                        'curve': _to_curve(line.baseline, im_size)},
+                                                        'curve': _to_curve(line.baseline, im_size),
+                                                        'bbox': _to_bbox(line.boundary, im_size)},
                                                        line_struct))
                             num_lines += 1
                         except Exception:
