@@ -192,11 +192,11 @@ def collate_sequences(im, page_data):
     Sorts and pads image data.
     """
     if isinstance(page_data[0][0], str):
-        labels = [x for x, _ in page_data]
+        labels = [x for x, _, _ in page_data]
     else:
         max_label_len = max(len(x) for x, _, _ in page_data)
         labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _, _ in page_data]).long()
-    label_lens = torch.LongTensor([len(x) for x, _ in page_data])
+    label_lens = torch.LongTensor([len(x) for x, _, _ in page_data])
     curves = None
     boxes = None
     if page_data[0][1] is not None:
