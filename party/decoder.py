@@ -57,12 +57,12 @@ class PromptEncoder(nn.Module):
         return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1)
 
     def _embed_curves(self, curves: torch.FloatTensor):
-        point_embedding = self._positional_embed(points)
+        point_embedding = self._positional_embed(curves)
         point_embedding[:, 0, :] += self.point_embeddings[0].weight
         point_embedding[:, 1, :] += self.point_embeddings[1].weight
         point_embedding[:, 2, :] += self.point_embeddings[2].weight
         point_embedding[:, 3, :] += self.point_embeddings[3].weight
-        return point_embedding.view(points.shape[0], -1)
+        return point_embedding.view(curves.shape[0], -1)
 
     def _embed_boxes(self, boxes: torch.FloatTensor):
         corner_embedding = self._positional_embed(boxes)
