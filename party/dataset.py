@@ -72,7 +72,6 @@ def _to_bbox(boundary, im_size) -> torch.Tensor:
     Converts a bounding polygon to a bbox in xyxyc_xc_yhw format.
     """
     flat_box = [point for pol in boundary for point in pol]
-    flat_box = [x for point in flat_box for x in point]
     xmin, xmax = min(flat_box[::2]), max(flat_box[::2])
     ymin, ymax = min(flat_box[1::2]), max(flat_box[1::2])
     w = xmax - xmin
