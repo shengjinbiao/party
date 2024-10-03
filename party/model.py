@@ -27,8 +27,9 @@ from torch.optim import lr_scheduler
 #from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
-from transformers import VisionEncoderDecoderModel, Swinv2Model
-from party.decoder import T5VisionDecoderModel
+from transformers import VisionEncoderDecoderModel
+# still needed to get registered properly in transformers
+from party.decoder import T5VisionDecoderModel  # NOQA
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +64,9 @@ class RecognitionModel(L.LightningModule):
 
         self.save_hyperparameters()
 
-        logger.info(f'Creating party model')
+        logger.info('Creating party model')
 
-        encoder = Swinv2Model.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
-        decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
-
-        self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+        self.nn = VisionEncoderDecoderModel.from_pretrained('mittagessen/party_preinit')
 
         self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
         self.nn.config.pad_token_id = self.nn.config.decoder.pad_token_id
