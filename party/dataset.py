@@ -71,7 +71,7 @@ def _to_bbox(boundary, im_size) -> torch.Tensor:
     """
     Converts a bounding polygon to a bbox in xyxyc_xc_yhw format.
     """
-    flat_box = [point for pol in boxes for point in boundary]
+    flat_box = [point for pol in boundary for point in pol]
     flat_box = [x for point in flat_box for x in point]
     xmin, xmax = min(flat_box[::2]), max(flat_box[::2])
     ymin, ymax = min(flat_box[1::2]), max(flat_box[1::2])
@@ -193,13 +193,19 @@ def collate_sequences(im, page_data):
     if isinstance(page_data[0][0], str):
         labels = [x for x, _ in page_data]
     else:
-        max_label_len = max(len(x) for x, _ in page_data)
-        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _ in page_data]).long()
+        max_label_len = max(len(x) for x, _, _ in page_data)
+        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _, _ in page_data]).long()
     label_lens = torch.LongTensor([len(x) for x, _ in page_data])
-    curves = torch.stack([x for _, x in page_data])
+    curves = None
+    boxes = None
+    if page_data[0][1] is not None:
+        curves = torch.stack([x for _, x, _ in page_data])
+    if page_data[0][2] is not None:
+        boxes = torch.stack([x for _, _, x in page_data])
     return {'image': im,
             'target': labels,
             'curves': curves,
+            'boxes': boxes,
             'target_lens': label_lens}
 
 
@@ -351,8 +357,12 @@ class BinnedBaselineDataset(Dataset):
 
         # sample up to max_batch_size lines and targets
         num_samples = min(self.max_batch_size, len(page_data))
+        # sample randomly between boxes and baselines
         lines = [page_data[x] for x in rng.choice(len(page_data), num_samples, replace=False, shuffle=False)]
-        lines = [(torch.tensor(x['text'], dtype=torch.int32), torch.tensor(x['curve']).view(4, 2)) for x in lines]
+        return_boxes = rng.choice([False, True], 1)
+        lines = [(torch.tensor(x['text'], dtype=torch.int32),
+                  torch.tensor(x['curve']).view(4, 2) if not return_boxes else None,
+                  torch.tensor(x['bbox']).view(4, 2) if return_boxes else None) for x in lines]
         return collate_sequences(im.unsqueeze(0), lines)
 
     def __len__(self) -> int:
