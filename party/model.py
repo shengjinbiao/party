@@ -39,10 +39,6 @@ class RecognitionModel(L.LightningModule):
     recognition model.
     """
     def __init__(self,
-                 num_classes: int,
-                 pad_id: int,
-                 sos_id: int,
-                 eos_id: int,
                  quit='fixed',
                  lag=10,
                  optimizer='AdamW',
@@ -67,7 +63,7 @@ class RecognitionModel(L.LightningModule):
 
         self.save_hyperparameters()
 
-        logger.info(f'Creating party model with {num_classes} outputs')
+        logger.info(f'Creating party model')
 
         encoder = Swinv2Model.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
         decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')

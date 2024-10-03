@@ -369,19 +369,11 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
         if load:
             message('Loading model.')
             model = RecognitionModel.load_from_checkpoint(load,
-                                                          num_classes=data_module.num_classes,
-                                                          pad_id=data_module.pad_id,
-                                                          sos_id=data_module.sos_id,
-                                                          eos_id=data_module.eos_id,
                                                           **hyper_params)
 
         else:
             message('Initializing model.')
-            model = RecognitionModel(**hyper_params,
-                                     num_classes=data_module.num_classes,
-                                     pad_id=data_module.pad_id,
-                                     sos_id=data_module.sos_id,
-                                     eos_id=data_module.eos_id)
+            model = RecognitionModel(**hyper_params)
 
     with threadpool_limits(limits=threads):
         trainer.fit(model, data_module)
