@@ -118,8 +118,8 @@ parser = etree.XMLParser(recover=True)
 with tempfile.NamedTemporaryFile() as tmpfile:
     with pa.OSFile(tmpfile.name, 'wb') as sink:
         with pa.ipc.new_file(sink, schema) as writer:
+            num_lines = 0
             for doc in track(docs, description='Reading XML files'):
-                num_lines = 0
                 with open(doc, 'r') as fp:
                     try:
                         tree = etree.parse(doc, parser=parser)
