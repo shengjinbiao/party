@@ -81,7 +81,7 @@ class PromptEncoder(nn.Module):
           Embeddings for the points with shape (B_1+B_2, E)
         """
         embeddings = torch.empty((0, self.embed_dim),
-                                 device=self.point_embeddings[0].weight.device)
+                                 device=self.point_embeddings.weight.device)
         if curves is not None:
             curve_embeddings = self._embed_curves(curves)
             embeddings = torch.cat([embeddings, curve_embeddings])
