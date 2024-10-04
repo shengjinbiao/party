@@ -29,7 +29,7 @@ from torchmetrics.aggregation import MeanMetric
 
 from transformers import VisionEncoderDecoderModel
 # still needed to get registered properly in transformers
-from party.decoder import T5VisionDecoderModel  # NOQA
+from party.decoder import MistralVisionDecoderModel # NOQA
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +67,6 @@ class RecognitionModel(L.LightningModule):
         logger.info('Creating party model')
 
         self.nn = VisionEncoderDecoderModel.from_pretrained('mittagessen/party_preinit')
-
-        self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
-        self.nn.config.pad_token_id = self.nn.config.decoder.pad_token_id
 
         self.nn.train()
 
