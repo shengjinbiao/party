@@ -41,7 +41,7 @@ from torchvision.transforms import v2
 from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
 
-from party.codec import ByT5Codec
+from party.codec import OctetCodec
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -108,7 +108,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                              ('bbox', pa.list_(pa.float32()))])
     page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
 
-    codec = ByT5Codec()
+    codec = OctetCodec()
 
     if normalization:
         text_transforms.append(partial(F_t.text_normalize, normalization=normalization))
@@ -251,7 +251,7 @@ class TextLineDataModule(L.LightningDataModule):
                                          v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
 
         # codec is stateless so we can just initiate it here
-        self.codec = ByT5Codec()
+        self.codec = OctetCodec()
 
         self.pad_id = self.codec.pad
         self.sos_id = self.codec.sos
