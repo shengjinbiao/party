@@ -44,7 +44,7 @@ class PromptEncoder(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
         # 4 curve points + 2 bbox corners, box center, box extents
-        self.point_embeddings = nn.ModuleList(nn.Embedding(1, embed_dim // 4) for i in range(9))
+        self.point_embeddings = nn.Embedding(8, embed_dim // 4)
         self.register_buffer("positional_encoding_gaussian_matrix", torch.randn((2, embed_dim // 8)))
 
     def _positional_embed(self, coords):
@@ -58,19 +58,13 @@ class PromptEncoder(nn.Module):
 
     def _embed_curves(self, curves: torch.FloatTensor):
         point_embedding = self._positional_embed(curves)
-        point_embedding[:, 0, :] += self.point_embeddings[0].weight
-        point_embedding[:, 1, :] += self.point_embeddings[1].weight
-        point_embedding[:, 2, :] += self.point_embeddings[2].weight
-        point_embedding[:, 3, :] += self.point_embeddings[3].weight
+        point_embedding += self.point_embeddings.weight[:4]
         return point_embedding.view(curves.shape[0], -1)
 
     def _embed_boxes(self, boxes: torch.FloatTensor):
-        corner_embedding = self._positional_embed(boxes)
-        corner_embedding[:, 0, :] += self.point_embeddings[4].weight
-        corner_embedding[:, 1, :] += self.point_embeddings[5].weight
-        corner_embedding[:, 2, :] += self.point_embeddings[6].weight
-        corner_embedding[:, 3, :] += self.point_embeddings[7].weight
-        return corner_embedding.view(boxes.shape[0], -1)
+        box_embedding = self._positional_embed(boxes)
+        box_embedding += self.point_embeddings.weight[4:]
+        return box_embedding.view(boxes.shape[0], -1)
 
     def forward(self,
                 curves: Optional[torch.FloatTensor] = None,
