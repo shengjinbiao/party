@@ -889,9 +889,9 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
     def __init__(self, config: MistralConfig):
+        config.is_decoder = True
         super().__init__(config)
         decoder_config = copy.deepcopy(config)
-        decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.decoder_start_token_id = config.bos_token_id
         self.model = MistralCrossAttentionModel(decoder_config)
@@ -958,18 +958,16 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
                           curves=curves,
                           boxes=boxes)
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        num_logits_to_keep=None,
-        **kwargs,
-    ):
+    def prepare_inputs_for_generation(self,
+                                      input_ids,
+                                      past_key_values=None,
+                                      attention_mask=None,
+                                      inputs_embeds=None,
+                                      cache_position=None,
+                                      position_ids=None,
+                                      use_cache=True,
+                                      num_logits_to_keep=None,
+                                      **kwargs):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
