@@ -32,12 +32,11 @@ from typing import List, Optional, Tuple, Union
 from transformers import GenerationMixin, AutoModelForCausalLM
 from transformers.cache_utils import EncoderDecoderCache, Cache, DynamicCache, SlidingWindowCache, StaticCache
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import CausalLMOutputWithPast, BaseModelOutputWithPast
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (is_flash_attn_2_available,
-                                is_flash_attn_greater_or_equal_2_10,
-                                is_torchdynamo_compiling)
+                                is_flash_attn_greater_or_equal_2_10)
 
 from transformers.models.mistral.modeling_mistral import (MistralMLP,
                                                           MistralRMSNorm,
@@ -328,17 +327,15 @@ class MistralFlashAttention2(MistralAttention):
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
 
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            causal_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
+        attn_output = _flash_attention_forward(query_states,
+                                               key_states,
+                                               value_states,
+                                               causal_mask,
+                                               q_len,
+                                               position_ids=position_ids,
+                                               dropout=dropout_rate,
+                                               is_causal=self.is_causal,
+                                               use_top_left_mask=self._flash_attn_uses_top_left_mask,)
 
         attn_output = attn_output.reshape(bsz, q_len, self.num_heads * self.head_dim).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -359,18 +356,16 @@ class MistralSdpaAttention(MistralAttention):
     """
 
     # Adapted from MistralAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    def forward(self,
+                hidden_states: torch.Tensor,
+                key_value_states: Optional[torch.Tensor] = None,
+                attention_mask: Optional[torch.Tensor] = None,
+                position_ids: Optional[torch.LongTensor] = None,
+                past_key_value: Optional[EncoderDecoderCache] = None,
+                output_attentions: bool = False,
+                use_cache: bool = False,
+                cache_position: Optional[torch.LongTensor] = None,
+                **kwargs) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
@@ -613,6 +608,12 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
         self._attn_implementation = config._attn_implementation
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        # Encoder for line prompts
+        self.line_embedding = PromptEncoder(config.hidden_size)
+
+        # output projection
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -630,6 +631,7 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
                 encoder_attention_mask: Optional[torch.FloatTensor] = None,
                 position_ids: Optional[torch.LongTensor] = None,
                 past_key_values: Optional[Union[EncoderDecoderCache, List[torch.FloatTensor]]] = None,
+                labels: Optional[torch.LongTensor] = None,
                 inputs_embeds: Optional[torch.FloatTensor] = None,
                 use_cache: Optional[bool] = None,
                 output_attentions: Optional[bool] = None,
@@ -753,22 +755,40 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
         if return_legacy_cache:
             next_cache = next_cache.to_legacy_cache()
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states,
-                                       past_key_values=next_cache,
-                                       hidden_states=all_hidden_states,
-                                       attentions=all_self_attns)
+        logits = self.lm_head(hidden_states).float()
 
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        use_cache: bool,
-        output_attentions: bool,
-    ):
+        loss = None
+        if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Ensure tensors are on the same device
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits, shift_labels)
+
+        if not return_dict:
+            output = tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(loss=loss,
+                                      logits=logits,
+                                      past_key_values=next_cache,
+                                      hidden_states=all_hidden_states,
+                                      attentions=all_self_attns)
+
+    def _update_causal_mask(self,
+                            attention_mask: torch.Tensor,
+                            input_tensor: torch.Tensor,
+                            cache_position: torch.Tensor,
+                            past_key_values: Cache,
+                            use_cache: bool,
+                            output_attentions: bool):
         if self._attn_implementation == "flash_attention_2":
             if attention_mask is not None and use_cache:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
@@ -862,20 +882,18 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
 
 
 class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
-
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the [`EncoderDecoderModel`] framework.
+    """
     def __init__(self, config: MistralConfig):
+        super().__init__(config)
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.decoder_start_token_id = config.bos_token_id
-        super().__init__(decoder_config)
         self.model = MistralCrossAttentionModel(decoder_config)
         self.vocab_size = config.vocab_size
-
-        # Positional embedding for quadratic Bézier curves
-        self.line_embedding = PromptEncoder(config.hidden_size)
-
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -887,10 +905,10 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.model.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.model.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -915,91 +933,26 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
                 num_logits_to_keep: int = 0,
                 curves: Optional[torch.FloatTensor] = None,
                 boxes: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
-        r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, MistralForCausalLM
-
-        >>> model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if labels is not None:
-            if use_cache:
-                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
-            use_cache = False
-            if input_ids is None and inputs_embeds is None:
-                input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(input_ids=input_ids,
-                             attention_mask=attention_mask,
-                             position_ids=position_ids,
-                             past_key_values=past_key_values,
-                             inputs_embeds=inputs_embeds,
-                             use_cache=use_cache,
-                             output_attentions=output_attentions,
-                             output_hidden_states=output_hidden_states,
-                             return_dict=return_dict,
-                             cache_position=cache_position)
-
-        hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        # TODO: remove the float() operation in v4.46
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :]).float()
-
-        loss = None
-        if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Ensure tensors are on the same device
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(loss=loss,
-                                      logits=logits,
-                                      past_key_values=outputs.past_key_values,
-                                      hidden_states=outputs.hidden_states,
-                                      attentions=outputs.attentions)
+        return self.model(input_ids=input_ids,
+                          attention_mask=attention_mask,
+                          position_ids=position_ids,
+                          past_key_values=past_key_values,
+                          labels=labels,
+                          inputs_embeds=inputs_embeds,
+                          use_cache=use_cache,
+                          output_attentions=output_attentions,
+                          output_hidden_states=output_hidden_states,
+                          return_dict=return_dict,
+                          cache_position=cache_position,
+                          curves=curves,
+                          boxes=boxes)
 
     def prepare_inputs_for_generation(
         self,
