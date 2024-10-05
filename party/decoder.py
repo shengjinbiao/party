@@ -70,7 +70,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+# Copied from transformers.models.llama.modeling_llama.aoply_rotary_pos_emb
 def apply_rotary_pos_emb(x, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query tensors.
 
@@ -679,17 +679,18 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
 
         # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-            else:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is not None:
+            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
+                return_self_attention_cache = True
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+            elif not isinstance(past_key_values, EncoderDecoderCache):
+                return_legacy_cache = True
                 logger.warning_once(
-                    "We detected that you are passing `past_key_values` as a tuple of tuples. This is deprecated and "
-                    "will be removed in v4.47. Please convert your cache or use an appropriate `Cache` class "
-                    "(https://huggingface.co/docs/transformers/kv_cache#legacy-cache-format)"
+                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.43.0. "
+                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
                 )
+                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
