@@ -948,6 +948,8 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
                           past_key_values=past_key_values,
                           labels=labels,
                           inputs_embeds=inputs_embeds,
+                          encoder_hidden_states=encoder_hidden_states,
+                          encoder_attention_mask=encoder_attention_mask,
                           use_cache=use_cache,
                           output_attentions=output_attentions,
                           output_hidden_states=output_hidden_states,
