@@ -895,6 +895,7 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
         config.is_decoder = True
         config.is_encoder_decoder = False
         config.decoder_start_token_id = config.bos_token_id
+        super().__init__(config)
         self.model = MistralCrossAttentionModel(config)
         self.vocab_size = config.vocab_size
 
