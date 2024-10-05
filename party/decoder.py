@@ -479,6 +479,8 @@ class MistralDecoderLayer(nn.Module):
                                                                                    layer_idx=layer_idx,
                                                                                    is_decoder=True)
 
+        self.encoder_attn_layer_norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -889,12 +891,11 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
     def __init__(self, config: MistralConfig):
-        super().__init__(config)
-        decoder_config = copy.deepcopy(config)
-        decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
-        decoder_config.decoder_start_token_id = config.bos_token_id
-        self.model = MistralCrossAttentionModel(decoder_config)
+        config = copy.deepcopy(config)
+        config.is_decoder = True
+        config.is_encoder_decoder = False
+        config.decoder_start_token_id = config.bos_token_id
+        self.model = MistralCrossAttentionModel(config)
         self.vocab_size = config.vocab_size
 
         # Initialize weights and apply final processing
