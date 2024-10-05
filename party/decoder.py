@@ -670,7 +670,7 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
 
         # add line embeddings to encoder hidden states
         if curves is not None or boxes is not None:
-            if encoder_hidden_states is not None:
+            if encoder_hidden_states is None:
                 raise ValueError('You need to specify encoder_hidden_states when either curves or boxes are given.')
             line_embeds = self.line_embedding(curves=curves, boxes=boxes).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
             encoder_hidden_states = encoder_hidden_states + line_embeds
