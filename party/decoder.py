@@ -32,7 +32,7 @@ from typing import List, Optional, Tuple, Union
 from transformers import GenerationMixin, AutoModelForCausalLM
 from transformers.cache_utils import EncoderDecoderCache, Cache, DynamicCache, SlidingWindowCache, StaticCache
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (is_flash_attn_2_available,
@@ -178,8 +178,8 @@ class MistralAttention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
             if not is_cross_attention:
                 key_states = apply_rotary_pos_emb(key_states, cos, sin)
             if past_key_value is not None:
@@ -541,8 +541,11 @@ class MistralDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
+                position_ids=position_ids,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
             )
             hidden_states = residual + hidden_states
 
@@ -641,7 +644,7 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
                 return_dict: Optional[bool] = None,
                 curves: Optional[torch.FloatTensor] = None,
                 boxes: Optional[torch.FloatTensor] = None,
-                cache_position: Optional[torch.LongTensor] = None) -> Union[Tuple, CausalLMOutputWithPast]:
+                cache_position: Optional[torch.LongTensor] = None) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -762,30 +765,13 @@ class MistralCrossAttentionModel(MistralDecoderPreTrainedModel):
 
         logits = self.lm_head(hidden_states).float()
 
-        loss = None
-        if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Ensure tensors are on the same device
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits, shift_labels)
-
         if not return_dict:
-            output = tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-            return (loss,) + output if loss is not None else output
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
-        return CausalLMOutputWithPast(loss=loss,
-                                      logits=logits,
-                                      past_key_values=next_cache,
-                                      hidden_states=all_hidden_states,
-                                      attentions=all_self_attns)
+        return CausalLMOutputWithCrossAttentions(logits=logits,
+                                                 past_key_values=next_cache,
+                                                 hidden_states=all_hidden_states,
+                                                 attentions=all_self_attns)
 
     def _update_causal_mask(self,
                             attention_mask: torch.Tensor,
@@ -937,7 +923,7 @@ class MistralVisionDecoderModel(MistralDecoderPreTrainedModel, GenerationMixin):
                 cache_position: Optional[torch.LongTensor] = None,
                 num_logits_to_keep: int = 0,
                 curves: Optional[torch.FloatTensor] = None,
-                boxes: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithPast]:
+                boxes: Optional[torch.FloatTensor] = None) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
