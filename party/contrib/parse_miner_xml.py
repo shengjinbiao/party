@@ -146,7 +146,7 @@ with tempfile.NamedTemporaryFile() as tmpfile:
                                 continue
                         # render PDF to image
                         im = pdf_page.render(scale=4).to_pil()
-                        im = optional_resize(im, max_side_length).convert('RGB')
+                        im = optional_resize(im, RECOGNITION_HYPER_PARAMS['longest_edge']).convert('RGB')
                         fp = io.BytesIO()
                         im.save(fp, format='png')
                         num_lines += len(page_data)
