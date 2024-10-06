@@ -18,6 +18,7 @@ from scipy.special import comb
 from shapely.geometry import LineString
 
 from party.codec import OctetCodec
+from party.default_specs import RECOGNITION_HYPER_PARAMS
 
 from rich.progress import track
 
