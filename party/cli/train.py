@@ -86,7 +86,7 @@ def compile(ctx, output, files, normalization, normalize_whitespace, reorder,
 
         dataset.compile(ground_truth,
                         output,
-                        longest_edge: longest_im_edge,
+                        longest_edge=longest_im_edge,
                         normalization=normalization,
                         normalize_whitespace=normalize_whitespace,
                         reorder=reorder,
