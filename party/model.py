@@ -54,7 +54,6 @@ class RecognitionModel(L.LightningModule):
                  cos_t_max=30,
                  cos_min_lr=1e-4,
                  warmup=15000,
-                 height=96,
                  **kwargs):
         super().__init__()
 

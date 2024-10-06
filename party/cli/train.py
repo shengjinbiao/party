@@ -50,11 +50,11 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
               'direction.  This should be set to the direction used during the '
               'creation of the training data. If set to `auto` it will be '
               'overridden by any explicit value given in the input files.')
-@click.option('--max-side-length', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['height'],
-              help='maximum length of longest side of image')
+@click.option('--longest-im-edge', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['longest_edge'],
+              help='maximum length of longest edge of image after proportional scaling')
 @click.argument('ground_truth', nargs=-1, type=click.Path(exists=True, dir_okay=False))
 def compile(ctx, output, files, normalization, normalize_whitespace, reorder,
-            base_dir, max_side_length, ground_truth):
+            base_dir, longest_im_edge, ground_truth):
     """
     Precompiles a binary dataset from a collection of XML files.
     """
@@ -86,7 +86,7 @@ def compile(ctx, output, files, normalization, normalize_whitespace, reorder,
 
         dataset.compile(ground_truth,
                         output,
-                        max_side_length=max_side_length,
+                        longest_edge: longest_im_edge,
                         normalization=normalization,
                         normalize_whitespace=normalize_whitespace,
                         reorder=reorder,
@@ -164,7 +164,7 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
 @click.option('-i', '--load', default=None, type=click.Path(exists=True), help='Checkpoint to load')
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='batch sample size')
-@click.option('--max-side-length', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['height'],
+@click.option('--longest-im-edge', show_default=True, type=click.INT, default=RECOGNITION_HYPER_PARAMS['longest_edge'],
               help='maximum length of longest side of image')
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='model', help='Output model file')
 @click.option('-F', '--freq', show_default=True, default=RECOGNITION_HYPER_PARAMS['freq'], type=click.FLOAT,
@@ -260,7 +260,7 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
               default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'],
               help='Number of batches to accumulate gradient across.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
-def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
+def train(ctx, load, batch_size, longest_im_edge, output, freq, quit, epochs,
           min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
           gradient_clip_val, warmup, schedule, gamma, step_size,
           sched_patience, cos_max, cos_min_lr, training_files,
@@ -290,7 +290,7 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
 
     hyper_params = RECOGNITION_HYPER_PARAMS.copy()
     hyper_params.update({'freq': freq,
-                         'height': max_side_length,
+                         'longest_edge': longest_im_edge,
                          'batch_size': batch_size,
                          'quit': quit,
                          'epochs': epochs,
@@ -334,7 +334,7 @@ def train(ctx, load, batch_size, max_side_length, output, freq, quit, epochs,
 
     data_module = TextLineDataModule(training_data=ground_truth,
                                      evaluation_data=evaluation_files,
-                                     height=hyper_params['height'],
+                                     longest_edge=hyper_params['longest_edge'],
                                      augmentation=augment,
                                      batch_size=batch_size,
                                      num_workers=workers)

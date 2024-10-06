@@ -42,6 +42,7 @@ from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
 
 from party.codec import OctetCodec
+from party.default_specs import RECOGNITION_HYPER_PARAMS
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -83,7 +84,7 @@ def _to_bbox(boundary, im_size) -> torch.Tensor:
 
 def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             output_file: Union[str, 'PathLike'] = None,
-            max_side_length: int = 4000,
+            longest_edge: int = RECOGNITION_HYPER_PARAMS['longest_edge'],
             reorder: Union[bool, Literal['L', 'R']] = True,
             normalize_whitespace: bool = True,
             normalization: Optional[Literal['NFD', 'NFC', 'NFKD', 'NFKC']] = None,
@@ -94,7 +95,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     Args:
         files: List of XML files
         output_file: destination to write arrow file to
-        max_side_length: Max length of longest image side.
+        longest_edge: Max length of longest image side.
         reorder: text reordering
         normalize_whitespace: whether to normalize all whitespace to ' '
         normalization: Unicode normalization to apply to data.
@@ -157,7 +158,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                             continue
                     if len(page_data) > 1:
                         # scale image only now
-                        im = optional_resize(im, max_side_length).convert('RGB')
+                        im = optional_resize(im, longest_edge).convert('RGB')
                         fp = io.BytesIO()
                         im.save(fp, format='png')
                         ar = pa.array([pa.scalar({'im': fp.getvalue(), 'lines': page_data}, page_struct)], page_struct)
@@ -237,7 +238,7 @@ class TextLineDataModule(L.LightningDataModule):
     def __init__(self,
                  training_data: Union[str, 'PathLike'],
                  evaluation_data: Union[str, 'PathLike'],
-                 height: int = 4000,
+                 longest_edge: int = RECOGNITION_HYPER_PARAMS['longest_edge'],
                  augmentation: bool = False,
                  batch_size: int = 16,
                  num_workers: int = 8):
@@ -245,7 +246,7 @@ class TextLineDataModule(L.LightningDataModule):
 
         self.save_hyperparameters()
 
-        self.im_transforms = v2.Compose([v2.Lambda(partial(optional_resize, max_size=height)),
+        self.im_transforms = v2.Compose([v2.Lambda(partial(optional_resize, max_size=longest_edge)),
                                          v2.ToImage(),
                                          v2.ToDtype(torch.float32, scale=True),
                                          v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
