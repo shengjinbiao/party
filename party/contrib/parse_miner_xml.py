@@ -17,7 +17,7 @@ import pyarrow as pa
 from scipy.special import comb
 from shapely.geometry import LineString
 
-from party.codec import ByT5Codec
+from party.codec import OctetCodec
 
 from rich.progress import track
 
@@ -106,7 +106,7 @@ line_struct = pa.struct([('text', pa.list_(pa.int32())), ('curve', pa.list_(pa.f
 page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
 schema = pa.schema([('pages', page_struct)])
 
-codec = ByT5Codec()
+codec = OctetCodec()
 
 max_side_length = 4000
 
