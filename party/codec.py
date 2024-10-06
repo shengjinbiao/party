@@ -62,7 +62,7 @@ class OctetTokenizer(PreTrainedTokenizer):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
 
-        self._added_tokens_decoder = {0: pad_token, 1: eos_token, 2: bos_token}
+        self._added_tokens_decoder = {0: pad_token, 1: bos_token, 2: eos_token}
         self.offset = len(self._added_tokens_decoder)
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
@@ -112,7 +112,6 @@ class OctetTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(token_ids_0 + eos) * [0]
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
-
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
@@ -242,4 +241,4 @@ class OctetCodec(object):
         return self.tokenizer.decode(labels)
 
     def __repr__(self):
-        return 'ByT5Codec()'
+        return 'OctetCodec()'
