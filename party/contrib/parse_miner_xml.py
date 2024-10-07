@@ -67,13 +67,11 @@ def _to_curve(baseline, im_size, min_points: int = 8):
     return pa.scalar(curve, type=pa.list_(pa.float32()))
 
 
-def _to_bbox(boundary, im_size):
+def _to_bbox(coords, im_size):
     """
     Converts a bounding polygon to a bbox in xyxyc_xc_yhw format.
     """
-    flat_box = [point for pol in boundary for point in pol]
-    xmin, xmax = min(flat_box[::2]), max(flat_box[::2])
-    ymin, ymax = min(flat_box[1::2]), max(flat_box[1::2])
+    xmin, ymin, xmax, ymax = coords
     w = xmax - xmin
     h = ymax - ymin
     cx = (xmin + xmax) / 2
