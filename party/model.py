@@ -27,9 +27,8 @@ from torch.optim import lr_scheduler
 #from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
-from transformers import VisionEncoderDecoderModel
-# still needed to get registered properly in transformers
-from party.decoder import MistralVisionDecoderModel # NOQA
+from transformers import DonutSwinModel, VisionEncoderDecoderModel
+from party.decoder import MistralVisionDecoderModel
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +64,9 @@ class RecognitionModel(L.LightningModule):
 
         logger.info('Creating party model')
 
-        self.nn = VisionEncoderDecoderModel.from_pretrained('mittagessen/party_preinit')
+        encoder = DonutSwinModel.from_pretrained('mittagessen/party_encoder')
+        decoder = MistralVisionDecoderModel.from_pretrained('mittagessen/party_decoder')
+        self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
         self.nn.config.pad_token_id = self.nn.config.decoder.pad_token_id
