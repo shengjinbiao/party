@@ -250,6 +250,8 @@ class TextLineDataModule(L.LightningDataModule):
                                              im_transforms=self.im_transforms,
                                              augmentation=self.hparams.augmentation,
                                              max_batch_size=self.hparams.batch_size)
+        self.train_set.max_seq_len = max(self.train_set.max_seq_len, self.val_set.max_seq_len)
+        self.val_set.max_seq_len = self.train_set.max_seq_len
 
     def train_dataloader(self):
         return DataLoader(self.train_set,
@@ -345,7 +347,7 @@ class BinnedBaselineDataset(Dataset):
         lines = [(torch.tensor(x['text'], dtype=torch.int32),
                   torch.tensor(x['curve']).view(4, 2) if not return_boxes else None,
                   torch.tensor(x['bbox']).view(4, 2) if return_boxes else None) for x in lines]
-        return collate_sequences(im.unsqueeze(0), lines)
+        return collate_sequences(im.unsqueeze(0), lines, self.max_seq_len)
 
     def __len__(self) -> int:
         return self._len // self.max_batch_size
