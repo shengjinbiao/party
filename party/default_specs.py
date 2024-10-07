@@ -43,7 +43,6 @@ RECOGNITION_HYPER_PARAMS = {'freq': 1.0,
                             'cos_t_max': 100,
                             'cos_min_lr': 5e-6,
                             'warmup': 1000,
-                            'longest_edge': 2560,
                             'accumulate_grad_batches': 4,
                             'gradient_clip_val': 1.0,
                             }

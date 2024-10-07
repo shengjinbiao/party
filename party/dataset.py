@@ -94,7 +94,6 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     Args:
         files: List of XML files
         output_file: destination to write arrow file to
-        longest_edge: Max length of longest image side.
         reorder: text reordering
         normalize_whitespace: whether to normalize all whitespace to ' '
         normalization: Unicode normalization to apply to data.
