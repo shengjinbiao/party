@@ -330,11 +330,11 @@ class BinnedBaselineDataset(Dataset):
         item = self.arrow_table.column('pages')[idx].as_py()
         logger.debug(f'Attempting to load {item["im"]}')
         im, page_data = item['im'], item['lines']
-        im = Image.open(io.BytesIO(im))
+        im = Image.open(io.BytesIO(im)).convert('RGB')
         im = self.transforms(im)['pixel_values'][0]
 
         if self.aug:
-            im = im.permute((1, 2, 0)).numpy()
+            im = im.transpose((1, 2, 0))
             o = self.aug(image=im)
             im = torch.tensor(o['image'].transpose(2, 0, 1))
 
