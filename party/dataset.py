@@ -36,13 +36,11 @@ from PIL import Image
 from scipy.special import comb
 from shapely.geometry import LineString
 
-from torchvision.transforms import v2
-
 from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
 
 from party.codec import OctetCodec
-from party.default_specs import RECOGNITION_HYPER_PARAMS
+from transformers import DonutImageProcessor
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -56,13 +54,13 @@ logger = logging.getLogger(__name__)
 
 def _to_curve(baseline, im_size, min_points: int = 8) -> torch.Tensor:
     """
-    Converts poly(base)lines to Bezier curves and normalizes them.
+    Converts poly(base)lines to Bezier curves.
     """
     baseline = np.array(baseline)
     if len(baseline) < min_points:
         ls = LineString(baseline)
         baseline = np.stack([np.array(ls.interpolate(x, normalized=True).coords)[0] for x in np.linspace(0, 1, 8)])
-    # control points normalized to patch extents
+    # control points
     curve = np.concatenate(([baseline[0]], bezier_fit(baseline), [baseline[-1]]))/im_size
     curve = curve.flatten()
     return pa.scalar(curve, type=pa.list_(pa.float32()))
@@ -79,12 +77,13 @@ def _to_bbox(boundary, im_size) -> torch.Tensor:
     h = ymax - ymin
     cx = (xmin + xmax) / 2
     cy = (ymin + ymax) / 2
-    return pa.scalar([xmin, ymin, xmax, ymax, cx, cy, w, h], type=pa.list_(pa.float32()))
+    bbox = np.array([[xmin, ymin], [xmax, ymax], [cx, cy], [w, h]]) / im_size
+    bbox = bbox.flatten()
+    return pa.scalar(bbox, type=pa.list_(pa.float32()))
 
 
 def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             output_file: Union[str, 'PathLike'] = None,
-            longest_edge: int = RECOGNITION_HYPER_PARAMS['longest_edge'],
             reorder: Union[bool, Literal['L', 'R']] = True,
             normalize_whitespace: bool = True,
             normalization: Optional[Literal['NFD', 'NFC', 'NFKD', 'NFKC']] = None,
@@ -122,7 +121,10 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                 text_transforms.append(F_t.text_reorder)
 
     num_lines = 0
-
+    # helper variables to enable padding to longest sequence without iterating
+    # over set during training.
+    max_lines_in_page = 0
+    max_octets_in_line = 0
     schema = pa.schema([('pages', page_struct)])
 
     callback(0, len(files))
@@ -133,8 +135,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                 for file in files:
                     try:
                         page = XMLPage(file).to_container()
-                        im = Image.open(page.imagename)
-                        im_size = im.size
+                        # check image is readable
+                        with Image.open(page.imagename) as im:
+                            im_size = im.size
                     except Exception:
                         continue
                     page_data = []
@@ -149,7 +152,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                             if not line.baseline:
                                 logger.info('No baseline given for line')
                                 continue
-                            page_data.append(pa.scalar({'text': pa.scalar(codec.encode(text).numpy()),
+                            encoded_line = codec.encode(text).numpy()
+                            max_octets_in_line = max(len(encoded_line), max_octets_in_line)
+                            page_data.append(pa.scalar({'text': pa.scalar(encoded_line),
                                                         'curve': _to_curve(line.baseline, im_size),
                                                         'bbox': _to_bbox(line.boundary, im_size)},
                                                        line_struct))
@@ -157,15 +162,16 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                         except Exception:
                             continue
                     if len(page_data) > 1:
-                        # scale image only now
-                        im = optional_resize(im, longest_edge).convert('RGB')
-                        fp = io.BytesIO()
-                        im.save(fp, format='png')
-                        ar = pa.array([pa.scalar({'im': fp.getvalue(), 'lines': page_data}, page_struct)], page_struct)
+                        with open(page.imagename, 'rb') as fp:
+                            im = fp.read()
+                        ar = pa.array([pa.scalar({'im': im, 'lines': page_data}, page_struct)], page_struct)
                         writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
+                        max_lines_in_page = max(len(page_data), max_lines_in_page)
                     callback(1, len(files))
         with pa.memory_map(tmpfile.name, 'rb') as source:
-            metadata = {'num_lines': num_lines.to_bytes(4, 'little')}
+            metadata = {'num_lines': num_lines.to_bytes(4, 'little'),
+                        'max_lines_in_page': max_lines_in_page.to_bytes(4, 'little'),
+                        'max_octets_in_line': max_octets_in_line.to_bytes(4, 'little')}
             schema = schema.with_metadata(metadata)
             ds_table = pa.ipc.open_file(source).read_all()
             new_table = ds_table.replace_schema_metadata(metadata)
@@ -188,15 +194,14 @@ def collate_null(batch):
     return batch[0]
 
 
-def collate_sequences(im, page_data):
+def collate_sequences(im, page_data, max_seq_len: int):
     """
     Sorts and pads image data.
     """
     if isinstance(page_data[0][0], str):
         labels = [x for x, _, _ in page_data]
     else:
-        max_label_len = max(len(x) for x, _, _ in page_data)
-        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _, _ in page_data]).long()
+        labels = torch.stack([F.pad(x, pad=(0, max_seq_len-len(x)), value=-100) for x, _, _ in page_data]).long()
     label_lens = torch.LongTensor([len(x) for x, _, _ in page_data])
     curves = None
     boxes = None
@@ -211,34 +216,10 @@ def collate_sequences(im, page_data):
             'target_lens': label_lens}
 
 
-def optional_resize(img: 'Image.Image', max_size: int):
-    """
-    Resizing that return images with the longest side below `max_size`
-    unchanged.
-
-    Args:
-        img: image to resize
-        max_size: maximum length of any side of the image
-    """
-    w, h = img.size
-    img_max = max(w, h)
-    if img_max > max_size:
-        if w > h:
-            h = int(h * max_size/w)
-            w = max_size
-        else:
-            w = int(w * max_size/h)
-            h = max_size
-        return img.resize((w, h))
-    else:
-        return img
-
-
 class TextLineDataModule(L.LightningDataModule):
     def __init__(self,
                  training_data: Union[str, 'PathLike'],
                  evaluation_data: Union[str, 'PathLike'],
-                 longest_edge: int = RECOGNITION_HYPER_PARAMS['longest_edge'],
                  augmentation: bool = False,
                  batch_size: int = 16,
                  num_workers: int = 8):
@@ -246,10 +227,7 @@ class TextLineDataModule(L.LightningDataModule):
 
         self.save_hyperparameters()
 
-        self.im_transforms = v2.Compose([v2.Lambda(partial(optional_resize, max_size=longest_edge)),
-                                         v2.ToImage(),
-                                         v2.ToDtype(torch.float32, scale=True),
-                                         v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
+        self.im_transforms = DonutImageProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
         # codec is stateless so we can just initiate it here
         self.codec = OctetCodec()
@@ -320,7 +298,8 @@ class BinnedBaselineDataset(Dataset):
         self.transforms = im_transforms
         self.aug = None
         self.max_batch_size = max_batch_size
-
+        self.max_seq_len = 0
+        self.scaled_size = im_transforms.size['width'], im_transforms.size['height']
         self._len = 0
 
         self.arrow_table = None
@@ -336,6 +315,7 @@ class BinnedBaselineDataset(Dataset):
                 else:
                     self.arrow_table = pa.concat_tables([self.arrow_table, ds_table])
                 self._len += int.from_bytes(raw_metadata[b'num_lines'], 'little')
+                self.max_seq_len = max(int.from_bytes(raw_metadata[b'max_octets_in_line'], 'little'), self.max_seq_len)
 
         if augmentation:
             from party.augmentation import DefaultAugmenter
@@ -350,7 +330,7 @@ class BinnedBaselineDataset(Dataset):
         logger.debug(f'Attempting to load {item["im"]}')
         im, page_data = item['im'], item['lines']
         im = Image.open(io.BytesIO(im))
-        im = self.transforms(im)
+        im = self.transforms(im)['pixel_values'][0]
 
         if self.aug:
             im = im.permute((1, 2, 0)).numpy()
