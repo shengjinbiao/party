@@ -193,14 +193,15 @@ def collate_null(batch):
     return batch[0]
 
 
-def collate_sequences(im, page_data, max_seq_len: int):
+def collate_sequences(im, page_data):
     """
     Sorts and pads image data.
     """
     if isinstance(page_data[0][0], str):
         labels = [x for x, _, _ in page_data]
     else:
-        labels = torch.stack([F.pad(x, pad=(0, max_seq_len-len(x)), value=-100) for x, _, _ in page_data]).long()
+        max_label_len = max(len(x) for x, _, _ in page_data)
+        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _, _ in page_data]).long()
     label_lens = torch.LongTensor([len(x) for x, _, _ in page_data])
     curves = None
     boxes = None
@@ -249,8 +250,6 @@ class TextLineDataModule(L.LightningDataModule):
                                              im_transforms=self.im_transforms,
                                              augmentation=self.hparams.augmentation,
                                              max_batch_size=self.hparams.batch_size)
-        self.train_set.max_seq_len = max(self.train_set.max_seq_len, self.val_set.max_seq_len)
-        self.val_set.max_seq_len = self.train_set.max_seq_len
 
     def train_dataloader(self):
         return DataLoader(self.train_set,
@@ -346,7 +345,7 @@ class BinnedBaselineDataset(Dataset):
         lines = [(torch.tensor(x['text'], dtype=torch.int32),
                   torch.tensor(x['curve']).view(4, 2) if not return_boxes else None,
                   torch.tensor(x['bbox']).view(4, 2) if return_boxes else None) for x in lines]
-        return collate_sequences(im.unsqueeze(0), lines, self.max_seq_len)
+        return collate_sequences(im.unsqueeze(0), lines)
 
     def __len__(self) -> int:
         return self._len // self.max_batch_size
