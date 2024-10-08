@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 """
-A small script compiling PDFMiner-generated XML and the corresponding PDFs into
+A small script compiling pdftohtml-generated XML and the corresponding PDFs into
 a binary dataset file for party.
 """
 import io
@@ -23,8 +23,9 @@ from rich.progress import track
 
 
 def attr_to_bbox(s):
-    x1, y1, x2, y2 = s.split(',')
-    return float(x1), float(y1), float(x2), float(y2)
+    x1, y1 = int(s.get('left')), int(s.get('top'))
+    x2, y2 = x1 + int(s.get('width')), y1 + int(s.get('height'))
+    return x1, y1, x2, y2
 
 
 # magic lsq cubic bezier fit function from the internet.
@@ -106,12 +107,11 @@ with tempfile.NamedTemporaryFile() as tmpfile:
                     except Exception:
                         continue
                     for pdf_page, page in zip(pdf, tree.findall('.//page')):
-                        _, _, *page_dim = attr_to_bbox(page.get('bbox'))
-                        page_dim = tuple(page_dim)
+                        _, _, *page_dim = attr_to_bbox(page)
                         page_data = []
-                        for line in page.findall('.//textline'):
+                        for line in page.findall('.//text'):
                             try:
-                                x1, y1, x2, y2 = attr_to_bbox(line.get('bbox'))
+                                x1, y1, x2, y2 = attr_to_bbox(line)
                                 # approximate baseline by straight line placed 10% into the
                                 # line bbox from the bottom.
                                 bl_y = y2 - ((y2 - y1) * 0.1)
