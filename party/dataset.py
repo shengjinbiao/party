@@ -51,6 +51,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+Image.MAX_IMAGE_PIXELS = 20000 ** 2
+
 
 def _to_curve(baseline, im_size, min_points: int = 8) -> torch.Tensor:
     """
