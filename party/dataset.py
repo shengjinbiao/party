@@ -331,7 +331,10 @@ class BinnedBaselineDataset(Dataset):
         item = self.arrow_table.column('pages')[idx].as_py()
         logger.debug(f'Attempting to load {item["im"]}')
         im, page_data = item['im'], item['lines']
-        im = Image.open(io.BytesIO(im)).convert('RGB')
+        try:
+            im = Image.open(io.BytesIO(im)).convert('RGB')
+        except Exception:
+            return self[0]
         im = self.transforms(im)['pixel_values'][0]
 
         if self.aug:
