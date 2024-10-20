@@ -202,24 +202,17 @@ def collate_sequences(im, page_data):
     Sorts and pads image data.
     """
     if isinstance(page_data[0][0], str):
-        labels = [x for x, _, _ in page_data]
+        labels = [x for x, _ in page_data]
     else:
-        max_label_len = max(len(x) for x, _, _ in page_data)
-        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _, _ in page_data]).long()
+        max_label_len = max(len(x) for x, _ in page_data)
+        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _ in page_data]).long()
         # replace Mistral EOS token id with T5 ones
         labels = labels[labels == 2] = 1
-
-    label_lens = torch.LongTensor([len(x) for x, _, _ in page_data])
-    curves = None
-    boxes = None
-    if page_data[0][1] is not None:
-        curves = torch.stack([x for _, x, _ in page_data])
-    if page_data[0][2] is not None:
-        boxes = torch.stack([x for _, _, x in page_data])
+    label_lens = torch.LongTensor([len(x) for x, _ in page_data])
+    curves = torch.stack([x for _, x in page_data])
     return {'image': im,
             'target': labels,
             'curves': curves,
-            'boxes': boxes,
             'target_lens': label_lens}
 
 
@@ -349,12 +342,10 @@ class BinnedBaselineDataset(Dataset):
 
         # sample up to max_batch_size lines and targets
         num_samples = min(self.max_batch_size, len(page_data))
-        # sample randomly between boxes and baselines
+        # sample randomly between baselines
         lines = [page_data[x] for x in rng.choice(len(page_data), num_samples, replace=False, shuffle=False)]
-        return_boxes = rng.choice([False, True], 1)
-        lines = [(torch.tensor(x['text'], dtype=torch.int32),
-                  torch.tensor(x['curve']).view(4, 2) if not return_boxes else None,
-                  torch.tensor(x['bbox']).view(4, 2) if return_boxes else None) for x in lines]
+        return_boxes = False
+        lines = [(torch.tensor(x['text'], dtype=torch.int32), torch.tensor(x['curve']).view(4, 2)) for x in lines]
         return collate_sequences(im.unsqueeze(0), lines)
 
     def __len__(self) -> int:

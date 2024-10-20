@@ -84,8 +84,7 @@ class RecognitionModel(L.LightningModule):
         try:
             output = self.nn(pixel_values=batch['image'],
                              labels=batch['target'],
-                             decoder_curves=batch['curves'],
-                             decoder_boxes=batch['boxes'])
+                             decoder_curves=batch['curves'])
 
             return output.loss
         except RuntimeError as e:
