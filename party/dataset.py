@@ -163,7 +163,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                         except Exception:
                             continue
                     if len(page_data) > 1:
-                        with open(page.imagename, 'rb') as fp:
+                        jxl_path = page.imagename.with_suffix('.jxl')
+                        im_path = jxl_path if jxl_path.exists() else page.imagename
+                        with open(im_path, 'rb') as fp:
                             im = fp.read()
                         ar = pa.array([pa.scalar({'im': im, 'lines': page_data}, page_struct)], page_struct)
                         writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
