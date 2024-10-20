@@ -65,7 +65,7 @@ class RecognitionModel(L.LightningModule):
         logger.info('Creating party model')
 
         encoder = DonutSwinModel.from_pretrained('mittagessen/party_encoder')
-        decoder = MistralVisionDecoderModel.from_pretrained('mittagessen/party_decoder')
+        decoder = T5VisionDecoderModel.from_pretrained('mittagessen/party_decoder_t5')
         self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
