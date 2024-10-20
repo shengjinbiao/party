@@ -39,7 +39,7 @@ from shapely.geometry import LineString
 from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
 
-from party.codec import OctetCodec
+from party.codec import ByT5Codec
 from transformers import DonutImageProcessor
 
 if TYPE_CHECKING:
@@ -109,7 +109,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                              ('bbox', pa.list_(pa.float32()))])
     page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
 
-    codec = OctetCodec()
+    codec = ByT5Codec()
 
     if normalization:
         text_transforms.append(partial(F_t.text_normalize, normalization=normalization))
@@ -206,6 +206,9 @@ def collate_sequences(im, page_data):
     else:
         max_label_len = max(len(x) for x, _, _ in page_data)
         labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _, _ in page_data]).long()
+        # replace Mistral EOS token id with T5 ones
+        labels = labels[labels == 2] = 1
+
     label_lens = torch.LongTensor([len(x) for x, _, _ in page_data])
     curves = None
     boxes = None
@@ -234,10 +237,10 @@ class TextLineDataModule(L.LightningDataModule):
         self.im_transforms = DonutImageProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
         # codec is stateless so we can just initiate it here
-        self.codec = OctetCodec()
+        self.codec = ByT5Codec()
 
         self.pad_id = self.codec.pad
-        self.sos_id = self.codec.sos
+        self.bos_id = self.codec.bos
         self.eos_id = self.codec.eos
 
         self.num_classes = self.codec.max_label + 1
