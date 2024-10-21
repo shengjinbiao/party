@@ -28,7 +28,7 @@ from torch.optim import lr_scheduler
 from torchmetrics.aggregation import MeanMetric
 
 from transformers import DonutSwinModel, VisionEncoderDecoderModel
-from party.decoder import MistralVisionDecoderModel
+from party.decoder import T5VisionDecoderModel
 
 logger = logging.getLogger(__name__)
 
