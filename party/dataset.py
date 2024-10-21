@@ -207,7 +207,7 @@ def collate_sequences(im, page_data):
         max_label_len = max(len(x) for x, _ in page_data)
         labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _ in page_data]).long()
         # replace Mistral EOS token id with T5 ones
-        labels = labels[labels == 2] = 1
+        labels[labels == 2] = 1
     label_lens = torch.LongTensor([len(x) for x, _ in page_data])
     curves = torch.stack([x for _, x in page_data])
     return {'image': im,
