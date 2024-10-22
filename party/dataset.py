@@ -136,9 +136,18 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                 for file in files:
                     try:
                         page = XMLPage(file).to_container()
-                        # check image is readable
-                        with Image.open(page.imagename) as im:
-                            im_size = im.size
+                        # pick image format with smallest size
+                        image_candidates = list(set(page.imagename.with_suffix(x) for x in ['.jxl', '.png']).union([page.imagename]))
+                        cand_idxs = np.argsort([t.stat().st_size if t.exists() else np.inf for t in image_candidates])
+                        im_path = None
+                        for idx in cand_idxs:
+                            try:
+                                with Image.open(image_candidates[idx]) as im:
+                                    im_size = im.size
+                                im_path = image_candidates[idx]
+                                break
+                            except Exception:
+                                continue
                     except Exception:
                         continue
                     page_data = []
@@ -162,9 +171,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                             num_lines += 1
                         except Exception:
                             continue
-                    if len(page_data) > 1:
-                        jxl_path = page.imagename.with_suffix('.jxl')
-                        im_path = jxl_path if jxl_path.exists() else page.imagename
+                    if len(page_data) > 1 and im_path is not None:
                         with open(im_path, 'rb') as fp:
                             im = fp.read()
                         ar = pa.array([pa.scalar({'im': im, 'lines': page_data}, page_struct)], page_struct)
@@ -344,7 +351,6 @@ class BinnedBaselineDataset(Dataset):
         num_samples = min(self.max_batch_size, len(page_data))
         # sample randomly between baselines
         lines = [page_data[x] for x in rng.choice(len(page_data), num_samples, replace=False, shuffle=False)]
-        return_boxes = False
         lines = [(torch.tensor(x['text'], dtype=torch.int32), torch.tensor(x['curve']).view(4, 2)) for x in lines]
         return collate_sequences(im.unsqueeze(0), lines)
 
