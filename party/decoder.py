@@ -67,7 +67,7 @@ class PromptEncoder(nn.Module):
         return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1).view(bs, -1)
 
 
-class OldT5VisionDecoderModel(T5PreTrainedModel):
+class T5VisionDecoderModel(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"encoder"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
 
