@@ -27,7 +27,7 @@ from torch.optim import lr_scheduler
 #from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
-from transformers import DonutSwinModel, VisionEncoderDecoderModel
+from transformers import VisionEncoderDecoderModel, Swinv2Model
 from party.decoder import T5VisionDecoderModel
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,10 @@ class RecognitionModel(L.LightningModule):
     recognition model.
     """
     def __init__(self,
+                 num_classes: int,
+                 pad_id: int,
+                 sos_id: int,
+                 eos_id: int,
                  quit='fixed',
                  lag=10,
                  optimizer='AdamW',
@@ -53,6 +57,7 @@ class RecognitionModel(L.LightningModule):
                  cos_t_max=30,
                  cos_min_lr=1e-4,
                  warmup=15000,
+                 height=96,
                  **kwargs):
         super().__init__()
 
@@ -62,10 +67,11 @@ class RecognitionModel(L.LightningModule):
 
         self.save_hyperparameters()
 
-        logger.info('Creating party model')
+        logger.info(f'Creating party model with {num_classes} outputs')
 
-        encoder = DonutSwinModel.from_pretrained('mittagessen/party_encoder')
-        decoder = T5VisionDecoderModel.from_pretrained('mittagessen/party_decoder_t5')
+        encoder = Swinv2Model.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+        decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
+
         self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
@@ -85,7 +91,6 @@ class RecognitionModel(L.LightningModule):
             output = self.nn(pixel_values=batch['image'],
                              labels=batch['target'],
                              decoder_curves=batch['curves'])
-
             return output.loss
         except RuntimeError as e:
             if is_oom_error(e):
