@@ -345,8 +345,9 @@ class BinnedBaselineDataset(Dataset):
             return self[0]
         im = self.transforms(im)
 
+        im = self.transforms(im)
         if self.aug:
-            im = im.transpose((1, 2, 0))
+            im = im.permute((1, 2, 0)).numpy()
             o = self.aug(image=im)
             im = torch.tensor(o['image'].transpose(2, 0, 1))
 
