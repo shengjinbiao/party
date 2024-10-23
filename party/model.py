@@ -62,8 +62,6 @@ class RecognitionModel(L.LightningModule):
 
         self.save_hyperparameters()
 
-        logger.info(f'Creating party model with {num_classes} outputs')
-
         encoder = timm.create_model('hiera_small_abswin_256.sbb2_pd_e200_in12k',
                                     pretrained=True,
                                     features_only=True,
@@ -126,9 +124,10 @@ class RecognitionModel(L.LightningModule):
         #logger.info(f'validation run: total chars {self.val_cer.total} errors {self.val_cer.errors} accuracy {accuracy}')
         #self.log('val_accuracy', accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         #self.log('val_word_accuracy', word_accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        if not self.trainer.sanity_checking:
+            self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True)
+            self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True)
         self.val_mean.reset()
-        self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True)
 
         #self.val_cer.reset()
         #self.val_wer.reset()
