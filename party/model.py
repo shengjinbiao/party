@@ -89,7 +89,7 @@ class RecognitionModel(L.LightningModule):
     def _step(self, batch):
         try:
             encoder_hidden_states = self.model.encoder.forward_features(batch['image'])
-            encoder_hidden_states = self.model.adapter(encoder_hidden_state)
+            encoder_hidden_states = self.model.adapter(encoder_hidden_states)
             output = self.model.decoder(encoder_hidden_states=encoder_hidden_states,
                                         labels=batch['target'],
                                         curves=batch['curves'])
