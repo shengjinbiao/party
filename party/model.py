@@ -62,7 +62,7 @@ class RecognitionModel(L.LightningModule):
 
         self.save_hyperparameters()
 
-        encoder = timm.create_model('hiera_small_abswin_256.sbb2_pd_e200_in12k',
+        encoder = timm.create_model('vit_small_patch32_224.augreg_in21k_ft_in1k',
                                     pretrained=True,
                                     num_classes=0,
                                     img_size=(2560, 1920))
@@ -77,6 +77,7 @@ class RecognitionModel(L.LightningModule):
                                           ['decoder', decoder],
                                           ['adapter', adapter]])
 
+        self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
         self.model.train()
 
         #self.val_cer = CharErrorRate()
