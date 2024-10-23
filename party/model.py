@@ -64,7 +64,7 @@ class RecognitionModel(L.LightningModule):
 
         encoder = timm.create_model('hiera_small_abswin_256.sbb2_pd_e200_in12k',
                                     pretrained=True,
-                                    features_only=True,
+                                    num_classes=0,
                                     img_size=(2560, 1920))
 
         decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
