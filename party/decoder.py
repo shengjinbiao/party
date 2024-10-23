@@ -23,7 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import T5Config
+from transformers import T5Config, GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.models.t5.modeling_t5 import T5PreTrainedModel, T5Stack
 
@@ -67,7 +67,7 @@ class PromptEncoder(nn.Module):
         return torch.cat([torch.sin(coords), torch.cos(coords)], dim=-1).view(bs, -1)
 
 
-class T5VisionDecoderModel(T5PreTrainedModel):
+class T5VisionDecoderModel(T5PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_unexpected = [r"encoder"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
 
