@@ -16,6 +16,7 @@
 Training loop interception helpers
 """
 
+import timm
 import torch
 import logging
 import lightning.pytorch as L
@@ -27,7 +28,6 @@ from torch.optim import lr_scheduler
 #from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
-from transformers import VisionEncoderDecoderModel, Swinv2Model
 from party.decoder import T5VisionDecoderModel
 
 logger = logging.getLogger(__name__)
@@ -39,10 +39,6 @@ class RecognitionModel(L.LightningModule):
     recognition model.
     """
     def __init__(self,
-                 num_classes: int,
-                 pad_id: int,
-                 sos_id: int,
-                 eos_id: int,
                  quit='fixed',
                  lag=10,
                  optimizer='AdamW',
@@ -57,7 +53,6 @@ class RecognitionModel(L.LightningModule):
                  cos_t_max=30,
                  cos_min_lr=1e-4,
                  warmup=15000,
-                 height=96,
                  **kwargs):
         super().__init__()
 
@@ -69,15 +64,22 @@ class RecognitionModel(L.LightningModule):
 
         logger.info(f'Creating party model with {num_classes} outputs')
 
-        encoder = Swinv2Model.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+        encoder = timm.create_model('hiera_small_abswin_256.sbb2_pd_e200_in12k',
+                                    pretrained=True,
+                                    features_only=True,
+                                    img_size=(2560, 1920))
+
         decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
 
-        self.nn = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+        encoder_dim = encoder.feature_info[-1]['num_chs']
+        decoder_dim = decoder.config.d_model
+        adapter = nn.Identity() if encoder_dim == decoder_dim else nn.Linear(encoder_dim, decoder_dim, bias = False)
 
-        self.nn.config.decoder_start_token_id = self.nn.config.decoder.decoder_start_token_id
-        self.nn.config.pad_token_id = self.nn.config.decoder.pad_token_id
+        self.model = nn.ModuleDict([['encoder', encoder],
+                                    ['decoder', decoder],
+                                    ['adapter', adapter])
 
-        self.nn.train()
+        self.model.train()
 
         #self.val_cer = CharErrorRate()
         #self.val_wer = WordErrorRate()
@@ -88,9 +90,11 @@ class RecognitionModel(L.LightningModule):
 
     def _step(self, batch):
         try:
-            output = self.nn(pixel_values=batch['image'],
-                             labels=batch['target'],
-                             decoder_curves=batch['curves'])
+            encoder_hidden_states = self.model.encoder.forward_features(batch['image'])
+            encoder_hidden_states = self.model.adapter(encoder_hidden_state)
+            output = self.model.decoder(encoder_hidden_states=encoder_hidden_states,
+                                        labels=batch['target'],
+                                        curves=batch['curves'])
             return output.loss
         except RuntimeError as e:
             if is_oom_error(e):
