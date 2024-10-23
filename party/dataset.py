@@ -28,7 +28,7 @@ from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
                     Tuple, Union, Sequence)
 
 from functools import partial
-from torchvision import transforms
+from torchvision.transforms import v2
 from torch.utils.data import Dataset, DataLoader
 
 from PIL import Image
@@ -40,7 +40,6 @@ from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
 
 from party.codec import ByT5Codec
-from transformers import DonutImageProcessor
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -236,7 +235,10 @@ class TextLineDataModule(L.LightningDataModule):
 
         self.save_hyperparameters()
 
-        self.im_transforms = DonutImageProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+        self.im_transforms = v2.Compose([v2.Resize((2560, 1920)),
+                                         v2.ToImage(),
+                                         v2.ToDtype(torch.float32, scale=True),
+                                         v2.Normalize(mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250])])
 
         # codec is stateless so we can just initiate it here
         self.codec = ByT5Codec()
@@ -300,7 +302,7 @@ class BinnedBaselineDataset(Dataset):
     """
     def __init__(self,
                  files: Sequence[Union[str, 'PathLike']],
-                 im_transforms: Callable[[Any], torch.Tensor] = transforms.Compose([]),
+                 im_transforms: Callable[[Any], torch.Tensor] = None,
                  augmentation: bool = False,
                  max_batch_size: int = 32) -> None:
         self.files = files
@@ -308,7 +310,6 @@ class BinnedBaselineDataset(Dataset):
         self.aug = None
         self.max_batch_size = max_batch_size
         self.max_seq_len = 0
-        self.scaled_size = im_transforms.size['width'], im_transforms.size['height']
         self._len = 0
 
         self.arrow_table = None
@@ -342,7 +343,7 @@ class BinnedBaselineDataset(Dataset):
             im = Image.open(io.BytesIO(im)).convert('RGB')
         except Exception:
             return self[0]
-        im = self.transforms(im)['pixel_values'][0]
+        im = self.transforms(im)
 
         if self.aug:
             im = im.transpose((1, 2, 0))
