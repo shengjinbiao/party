@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from transformers import T5Config, GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-from transformers.models.t5.modeling_t5 import T5PreTrainedModel, T5Stack
+from party.t5 import T5Stack, T5PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
