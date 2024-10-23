@@ -71,11 +71,11 @@ class RecognitionModel(L.LightningModule):
 
         encoder_dim = encoder.feature_info[-1]['num_chs']
         decoder_dim = decoder.config.d_model
-        adapter = nn.Identity() if encoder_dim == decoder_dim else nn.Linear(encoder_dim, decoder_dim, bias = False)
+        adapter = torch.nn.Identity() if encoder_dim == decoder_dim else torch.nn.Linear(encoder_dim, decoder_dim, bias = False)
 
-        self.model = nn.ModuleDict([['encoder', encoder],
-                                    ['decoder', decoder],
-                                    ['adapter', adapter])
+        self.model = torch.nn.ModuleDict([['encoder', encoder],
+                                          ['decoder', decoder],
+                                          ['adapter', adapter]])
 
         self.model.train()
 
@@ -175,7 +175,7 @@ class RecognitionModel(L.LightningModule):
     # scheduler are then only performed at the end of the epoch.
     def configure_optimizers(self):
         return _configure_optimizer_and_lr_scheduler(self.hparams,
-                                                     self.nn.parameters(),
+                                                     self.model.parameters(),
                                                      loss_tracking_mode='max')
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
