@@ -22,6 +22,7 @@ import numpy as np
 import lightning.pytorch as L
 
 import tempfile
+import pillow_jxl
 import pyarrow as pa
 
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
