@@ -150,7 +150,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                                 continue
                     except Exception:
                         continue
-                    if im_path is not None:
+                    if im_path is None:
                         continue
                     page_data = []
                     for line in page.lines:
