@@ -150,6 +150,8 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                                 continue
                     except Exception:
                         continue
+                    if im_path is not None:
+                        continue
                     page_data = []
                     for line in page.lines:
                         try:
@@ -171,7 +173,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                             num_lines += 1
                         except Exception:
                             continue
-                    if len(page_data) > 1 and im_path is not None:
+                    if len(page_data) > 1:
                         with open(im_path, 'rb') as fp:
                             im = fp.read()
                         ar = pa.array([pa.scalar({'im': im, 'lines': page_data}, page_struct)], page_struct)
