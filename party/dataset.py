@@ -89,6 +89,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
             reorder: Union[bool, Literal['L', 'R']] = True,
             normalize_whitespace: bool = True,
             normalization: Optional[Literal['NFD', 'NFC', 'NFKD', 'NFKC']] = None,
+            max_line_tokens: int = 384,
             callback: Callable[[int, int], None] = lambda chunk, lines: None) -> None:
     """
     Compiles a collection of XML facsimile files into a binary arrow dataset.
@@ -99,6 +100,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
         reorder: text reordering
         normalize_whitespace: whether to normalize all whitespace to ' '
         normalization: Unicode normalization to apply to data.
+        max_line_tokens: maximum number of tokens per line
         callback: progress callback
     """
     text_transforms: List[Callable[[str], str]] = []
@@ -153,6 +155,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                     if im_path is None:
                         continue
                     page_data = []
+                    prev_max_octets_in_line = max_octets_in_line
                     for line in page.lines:
                         try:
                             text = line.text
@@ -173,6 +176,10 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                             num_lines += 1
                         except Exception:
                             continue
+                    # skip pages with lines longer than max_line_tokens
+                    if max_octets_in_line > max_line_tokens:
+                        max_octets_in_line = prev_max_octets_in_line
+                        continue
                     if len(page_data) > 1:
                         with open(im_path, 'rb') as fp:
                             im = fp.read()
@@ -256,11 +263,11 @@ class TextLineDataModule(L.LightningDataModule):
         self.train_set = BinnedBaselineDataset(self.hparams.training_data,
                                                im_transforms=self.im_transforms,
                                                augmentation=self.hparams.augmentation,
-                                               max_batch_size=self.hparams.batch_size)
+                                               batch_size=self.hparams.batch_size)
         self.val_set = BinnedBaselineDataset(self.hparams.evaluation_data,
                                              im_transforms=self.im_transforms,
                                              augmentation=self.hparams.augmentation,
-                                             max_batch_size=self.hparams.batch_size)
+                                             batch_size=self.hparams.batch_size)
         self.train_set.max_seq_len = max(self.train_set.max_seq_len, self.val_set.max_seq_len)
         self.val_set.max_seq_len = self.train_set.max_seq_len
 
@@ -299,18 +306,18 @@ class BinnedBaselineDataset(Dataset):
         im_transforms: Function taking an PIL.Image and returning a tensor
                        suitable for forward passes.
         augmentation: Enables augmentation.
-        max_batch_size: Maximum size of a batch. All samples from a batch will
-                        come from a single page.
+        batch_size: Maximum size of a batch. All samples from a batch will
+                    come from a single page.
     """
     def __init__(self,
                  files: Sequence[Union[str, 'PathLike']],
                  im_transforms: Callable[[Any], torch.Tensor] = None,
                  augmentation: bool = False,
-                 max_batch_size: int = 32) -> None:
+                 batch_size: int = 32) -> None:
         self.files = files
         self.transforms = im_transforms
         self.aug = None
-        self.max_batch_size = max_batch_size
+        self.batch_size = batch_size
         self.max_seq_len = 0
         self._len = 0
 
@@ -353,12 +360,12 @@ class BinnedBaselineDataset(Dataset):
             im = torch.tensor(o['image'].transpose(2, 0, 1))
 
         # sample randomly between baselines
-        lines = [page_data[x] for x in rng.choice(len(page_data), self.max_batch_size, replace=True, shuffle=False)]
+        lines = [page_data[x] for x in rng.choice(len(page_data), self.batch_size, replace=True, shuffle=False)]
         lines = [(torch.tensor(x['text'], dtype=torch.int32), torch.tensor(x['curve']).view(4, 2)) for x in lines]
         return collate_sequences(im.unsqueeze(0), lines, self.max_seq_len)
 
     def __len__(self) -> int:
-        return self._len // self.max_batch_size
+        return self._len // self.batch_size
 
 
 # magic lsq cubic bezier fit function from the internet.
