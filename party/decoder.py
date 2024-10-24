@@ -167,6 +167,7 @@ class T5VisionDecoderModel(T5PreTrainedModel, GenerationMixin):
             raise ValueError('input_ids and curves batch_size '
                              f'needs to be equal ({input_ids.size[0]} '
                              f'!= {curves.shape[0]})')
+
         # expand encoder_hidden_states from (1, W, E) to (N, W, E) with N being the batch size of the tgt sequence.
         if encoder_hidden_states is not None:
             encoder_hidden_states = encoder_hidden_states.repeat(input_ids.size(0), 1, 1)
