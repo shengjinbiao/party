@@ -67,6 +67,8 @@ class RecognitionModel(L.LightningModule):
                                     num_classes=0)
 
         decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
+        # disable caching during training
+        decoder.config.use_cache = False
 
         encoder_dim = encoder.feature_info[-1]['num_chs']
         decoder_dim = decoder.config.d_model
