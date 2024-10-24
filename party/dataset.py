@@ -22,7 +22,7 @@ import numpy as np
 import lightning.pytorch as L
 
 import tempfile
-import pillow_jxl
+import pillow_jxl # NOQA
 import pyarrow as pa
 
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
@@ -206,15 +206,14 @@ def collate_null(batch):
     return batch[0]
 
 
-def collate_sequences(im, page_data):
+def collate_sequences(im, page_data, max_seq_len: int):
     """
     Sorts and pads image data.
     """
     if isinstance(page_data[0][0], str):
         labels = [x for x, _ in page_data]
     else:
-        max_label_len = max(len(x) for x, _ in page_data)
-        labels = torch.stack([F.pad(x, pad=(0, max_label_len-len(x)), value=-100) for x, _ in page_data]).long()
+        labels = torch.stack([F.pad(x, pad=(0, max_seq_len-len(x)), value=-100) for x, _ in page_data]).long()
         # replace Mistral EOS token id with T5 ones
         labels[labels == 2] = 1
     label_lens = torch.LongTensor([len(x) for x, _ in page_data])
@@ -262,6 +261,8 @@ class TextLineDataModule(L.LightningDataModule):
                                              im_transforms=self.im_transforms,
                                              augmentation=self.hparams.augmentation,
                                              max_batch_size=self.hparams.batch_size)
+        self.train_set.max_seq_len = max(self.train_set.max_seq_len, self.val_set.max_seq_len)
+        self.val_set.max_seq_len = self.train_set.max_seq_len
 
     def train_dataloader(self):
         return DataLoader(self.train_set,
@@ -344,7 +345,6 @@ class BinnedBaselineDataset(Dataset):
             im = Image.open(io.BytesIO(im)).convert('RGB')
         except Exception:
             return self[0]
-        im = self.transforms(im)
 
         im = self.transforms(im)
         if self.aug:
@@ -352,12 +352,10 @@ class BinnedBaselineDataset(Dataset):
             o = self.aug(image=im)
             im = torch.tensor(o['image'].transpose(2, 0, 1))
 
-        # sample up to max_batch_size lines and targets
-        num_samples = min(self.max_batch_size, len(page_data))
         # sample randomly between baselines
-        lines = [page_data[x] for x in rng.choice(len(page_data), num_samples, replace=False, shuffle=False)]
+        lines = [page_data[x] for x in rng.choice(len(page_data), self.max_batch_size, replace=True, shuffle=False)]
         lines = [(torch.tensor(x['text'], dtype=torch.int32), torch.tensor(x['curve']).view(4, 2)) for x in lines]
-        return collate_sequences(im.unsqueeze(0), lines)
+        return collate_sequences(im.unsqueeze(0), lines, self.max_seq_len)
 
     def __len__(self) -> int:
         return self._len // self.max_batch_size
