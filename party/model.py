@@ -64,7 +64,8 @@ class RecognitionModel(L.LightningModule):
 
         encoder = timm.create_model('mambaout_base_plus_rw.sw_e150_r384_in12k_ft_in1k',
                                     pretrained=True,
-                                    num_classes=0)
+                                    features_only=True,
+                                    out_indices=[-1])
 
         decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
         # disable caching during training
@@ -90,7 +91,7 @@ class RecognitionModel(L.LightningModule):
 
     def _step(self, batch):
         try:
-            encoder_hidden_states = self.model.encoder.forward_features(batch['image'])
+            encoder_hidden_states = self.model.encoder(batch['image'])[0]
             b, _, _, e = encoder_hidden_states.shape
             encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
             encoder_hidden_states = self.model.adapter(encoder_hidden_states)
