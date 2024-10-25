@@ -33,6 +33,37 @@ from party.decoder import T5VisionDecoderModel
 logger = logging.getLogger(__name__)
 
 
+class PartyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.encoder = timm.create_model('mambaout_base_plus_rw.sw_e150_r384_in12k_ft_in1k',
+                                         pretrained=True,
+                                         features_only=True,
+                                         out_indices=[-1])
+
+        self.decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
+        # disable caching during training
+        self.decoder.config.use_cache = False
+
+        encoder_dim = self.encoder.feature_info[-1]['num_chs']
+        decoder_dim = self.decoder.config.d_model
+        self.adapter = torch.nn.Identity() if encoder_dim == decoder_dim else torch.nn.Linear(encoder_dim, decoder_dim, bias = False)
+
+    def forward(self,
+                im: torch.FloatTensor,
+                curves: torch.FloatTensor,
+                labels: torch.FloatTensor):
+
+        encoder_hidden_states = self.model.encoder(im)[0]
+        b, _, _, e = encoder_hidden_states.shape
+        encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
+        encoder_hidden_states = self.model.adapter(encoder_hidden_states)
+        output = self.model.decoder(encoder_hidden_states=encoder_hidden_states,
+                                    labels=labels,
+                                    curves=curves)
+        return output.loss
+
+
 class RecognitionModel(L.LightningModule):
     """
     A LightningModule encapsulating the training setup for a text
@@ -62,23 +93,7 @@ class RecognitionModel(L.LightningModule):
 
         self.save_hyperparameters()
 
-        encoder = timm.create_model('mambaout_base_plus_rw.sw_e150_r384_in12k_ft_in1k',
-                                    pretrained=True,
-                                    features_only=True,
-                                    out_indices=[-1])
-
-        decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
-        # disable caching during training
-        decoder.config.use_cache = False
-
-        encoder_dim = encoder.feature_info[-1]['num_chs']
-        decoder_dim = decoder.config.d_model
-        adapter = torch.nn.Identity() if encoder_dim == decoder_dim else torch.nn.Linear(encoder_dim, decoder_dim, bias = False)
-
-        self.model = torch.nn.ModuleDict([['encoder', encoder],
-                                          ['decoder', decoder],
-                                          ['adapter', adapter]])
-
+        self.model = PartyModel()
         self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
         self.model.train()
 
@@ -87,18 +102,11 @@ class RecognitionModel(L.LightningModule):
         self.val_mean = MeanMetric()
 
     def forward(self, x, curves):
-        return self.nn(pixel_values=x, decoder_curves=curves)
+        return self.model(pixel_values=x, decoder_curves=curves)
 
     def _step(self, batch):
         try:
-            encoder_hidden_states = self.model.encoder(batch['image'])[0]
-            b, _, _, e = encoder_hidden_states.shape
-            encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
-            encoder_hidden_states = self.model.adapter(encoder_hidden_states)
-            output = self.model.decoder(encoder_hidden_states=encoder_hidden_states,
-                                        labels=batch['target'],
-                                        curves=batch['curves'])
-            return output.loss
+            return self.model(batch['image'], batch['curves'], batch['target'])
         except RuntimeError as e:
             if is_oom_error(e):
                 logger.warning('Out of memory error in trainer. Skipping batch and freeing caches.')
