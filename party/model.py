@@ -36,10 +36,10 @@ logger = logging.getLogger(__name__)
 class PartyModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.encoder = timm.create_model('mambaout_base_plus_rw.sw_e150_r384_in12k_ft_in1k',
+        self.encoder = timm.create_model('vit_mediumd_patch16_reg4_gap_384.sbb2_e200_in12k_ft_in1k',
                                          pretrained=True,
                                          features_only=True,
-                                         out_indices=[-1])
+                                         img_size=(2560, 1920))
 
         self.decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
         # disable caching during training
