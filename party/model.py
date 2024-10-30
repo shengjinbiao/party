@@ -54,13 +54,13 @@ class PartyModel(torch.nn.Module):
                 curves: torch.FloatTensor,
                 labels: torch.FloatTensor):
 
-        encoder_hidden_states = self.model.encoder(im)[0]
+        encoder_hidden_states = self.encoder(im)[0]
         b, _, _, e = encoder_hidden_states.shape
         encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
-        encoder_hidden_states = self.model.adapter(encoder_hidden_states)
-        output = self.model.decoder(encoder_hidden_states=encoder_hidden_states,
-                                    labels=labels,
-                                    curves=curves)
+        encoder_hidden_states = self.adapter(encoder_hidden_states)
+        output = self.decoder(encoder_hidden_states=encoder_hidden_states,
+                              labels=labels,
+                              curves=curves)
         return output.loss
 
 
