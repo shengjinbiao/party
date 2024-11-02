@@ -222,12 +222,10 @@ def collate_sequences(im, page_data, max_seq_len: int):
         labels = [x for x, _ in page_data]
     else:
         labels = torch.stack([F.pad(x, pad=(0, max_seq_len-len(x)), value=-100) for x, _ in page_data]).long()
-    label_lens = torch.LongTensor([len(x) for x, _ in page_data])
     curves = torch.stack([x for _, x in page_data])
     return {'image': im,
-            'target': labels,
-            'curves': curves,
-            'target_lens': label_lens}
+            'tokens': labels,
+            'curves': curves}
 
 
 class TextLineDataModule(L.LightningDataModule):
