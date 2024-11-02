@@ -332,7 +332,7 @@ class PartyModel(nn.Module):
 
         output = self.decoder(tokens=tokens,
                               mask=None,
-                              encoder_input=encoder_embed,
+                              encoder_input=encoder_hidden_states,
                               encoder_mask=None,
                               input_pos=input_pos)
         return output
