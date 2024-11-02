@@ -114,7 +114,13 @@ class RecognitionModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         loss = self._step(batch)
         if loss:
-            self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+            self.log('train_loss',
+                     loss,
+                     batch_size=batch['tokens'].shape[0],
+                     on_step=True,
+                     on_epoch=True,
+                     prog_bar=True,
+                     logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
