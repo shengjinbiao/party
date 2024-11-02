@@ -72,7 +72,7 @@ class RecognitionModel(L.LightningModule):
         self.model = PartyModel(encoder=encoder,
                                 decoder=decoder,
                                 encoder_embed_dim=encoder.feature_info[-1]['num_chs'],
-                                decoder_embed_dim=decoder.tok_embeddings.num_embeddings)
+                                decoder_embed_dim=decoder.tok_embeddings.embedding_dim)
 
         self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
         self.model.train()
