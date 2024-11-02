@@ -61,7 +61,7 @@ class RecognitionModel(L.LightningModule):
         self.best_model = None
 
         self.save_hyperparameters()
-        encoder = timm.create_model('swin_tiny_patch4_window7_224.ms_in22k',
+        encoder = timm.create_model('swin_base_patch4_window12_384.ms_in22k',
                                     pretrained=True,
                                     num_classes=0,
                                     img_size=(2560, 1920),
