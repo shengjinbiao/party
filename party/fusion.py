@@ -320,7 +320,7 @@ class PartyModel(nn.Module):
         encoder_hidden_states = None
         if encoder_input is not None:
             encoder_hidden_states = self.encoder(encoder_input)
-            b, _, _, e = encoder_hidden_states.shape
+            b, e = encoder_hidden_states.shape[0], encoder_hidden_states.shape[-1]
             encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
             encoder_hidden_states = self.adapter(encoder_hidden_states)
             # expand encoder_hidden_states from (1, s_e, d) to (b, s_e, d)
