@@ -228,7 +228,7 @@ class PartyModel(nn.Module):
                                      encoder_embed_dim,
                                      decoder_embed_dim)
 
-        self.prompt_encoder = PromptEncoder(decoder_embed_dim)
+        self.curve_embedding = PromptEncoder(decoder_embed_dim)
 
     def setup_caches(self,
                      batch_size: int,
