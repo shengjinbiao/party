@@ -103,7 +103,7 @@ class RecognitionModel(L.LightningModule):
             targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
             logits = logits.reshape(-1, logits.shape[-1])
             # Compute loss
-            return self.criterion(logits, labels)
+            return self.criterion(logits, targets)
         except RuntimeError as e:
             if is_oom_error(e):
                 logger.warning('Out of memory error in trainer. Skipping batch and freeing caches.')
