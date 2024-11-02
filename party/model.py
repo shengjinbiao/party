@@ -97,7 +97,7 @@ class RecognitionModel(L.LightningModule):
                                 encoder_curves=batch['curves'])
 
             # shift the tokens to create targets
-            ignore_idxs = torch.full(tokens.shape[0],
+            ignore_idxs = torch.full((tokens.shape[0],),
                                      self.criterion.ignore_index,
                                      dtype=tokens.dtype, device=tokens.device)
             targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
