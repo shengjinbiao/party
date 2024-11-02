@@ -34,6 +34,8 @@ from torchtune.modules import (MultiHeadAttention, RMSNorm, TanhGate,
 from torchtune.modules import TiedLinear
 from torchtune.modules.model_fusion import FusionLayer
 
+from party.prompt import PromptEncoder
+
 
 logger = logging.getLogger(__name__)
 
@@ -220,10 +222,13 @@ class PartyModel(nn.Module):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
+
         self.adapter = party_adapter(adapter_num_layers,
                                      adapter_num_heads,
                                      encoder_embed_dim,
                                      decoder_embed_dim)
+
+        self.prompt_encoder = PromptEncoder(decoder_embed_dim)
 
     def setup_caches(self,
                      batch_size: int,
@@ -321,7 +326,7 @@ class PartyModel(nn.Module):
             # expand encoder_hidden_states from (1, s_e, d) to (b, s_e, d)
             encoder_hidden_states = encoder_hidden_states.repeat(tokens.size(0), 1, 1)
 
-            # add curve embeddings to encoder hidden states
+            # add curve embeddings to encoder hidden states after adaptatio to decoder_embed_dim
             curve_embeds = self.curve_embedding(encoder_curves).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
             encoder_hidden_states = encoder_hidden_states + curve_embeds
 
