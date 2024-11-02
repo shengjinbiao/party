@@ -40,7 +40,7 @@ from shapely.geometry import LineString
 from kraken.lib import functional_im_transforms as F_t
 from kraken.lib.xml import XMLPage
 
-from party.codec import ByT5Codec
+from party.tokenizer import OctetTokenizer
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -111,7 +111,7 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                              ('bbox', pa.list_(pa.float32()))])
     page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
 
-    codec = ByT5Codec()
+    tokenizer = OctetTokenizer()
 
     if normalization:
         text_transforms.append(partial(F_t.text_normalize, normalization=normalization))
@@ -167,7 +167,8 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                             if not line.baseline:
                                 logger.info('No baseline given for line')
                                 continue
-                            encoded_line = codec.encode(text).numpy()
+                            # the dataset 
+                            encoded_line = tokenizer.encode(text, add_bos=False, add_eos=False).numpy()
                             max_octets_in_line = max(len(encoded_line), max_octets_in_line)
                             page_data.append(pa.scalar({'text': pa.scalar(encoded_line),
                                                         'curve': _to_curve(line.baseline, im_size),
@@ -221,8 +222,6 @@ def collate_sequences(im, page_data, max_seq_len: int):
         labels = [x for x, _ in page_data]
     else:
         labels = torch.stack([F.pad(x, pad=(0, max_seq_len-len(x)), value=-100) for x, _ in page_data]).long()
-        # replace Mistral EOS token id with T5 ones
-        labels[labels == 2] = 1
     label_lens = torch.LongTensor([len(x) for x, _ in page_data])
     curves = torch.stack([x for _, x in page_data])
     return {'image': im,
@@ -247,14 +246,14 @@ class TextLineDataModule(L.LightningDataModule):
                                          v2.ToDtype(torch.float32, scale=True),
                                          v2.Normalize(mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250])])
 
-        # codec is stateless so we can just initiate it here
-        self.codec = ByT5Codec()
+        # tokenizer is stateless so we can just initiate it here
+        tokenizer = OctetTokenizer()
 
-        self.pad_id = self.codec.pad
-        self.bos_id = self.codec.bos
-        self.eos_id = self.codec.eos
+        self.pad_id = tokenizer.pad_id
+        self.bos_id = tokenizer.bos_id
+        self.eos_id = tokenizer.eos_id
 
-        self.num_classes = self.codec.max_label + 1
+        self.num_classes = tokenizer.max_label + 1
 
     def setup(self, stage: str):
         """
@@ -263,11 +262,17 @@ class TextLineDataModule(L.LightningDataModule):
         self.train_set = BinnedBaselineDataset(self.hparams.training_data,
                                                im_transforms=self.im_transforms,
                                                augmentation=self.hparams.augmentation,
-                                               batch_size=self.hparams.batch_size)
+                                               batch_size=self.hparams.batch_size,
+                                               pad_id=self.pad_id,
+                                               bos_id=self.bos_id,
+                                               eos_id=self.eos_id)
         self.val_set = BinnedBaselineDataset(self.hparams.evaluation_data,
                                              im_transforms=self.im_transforms,
                                              augmentation=self.hparams.augmentation,
-                                             batch_size=self.hparams.batch_size)
+                                             batch_size=self.hparams.batch_size,
+                                             pad_id=self.pad_id,
+                                             bos_id=self.bos_id,
+                                             eos_id=self.eos_id)
         self.train_set.max_seq_len = max(self.train_set.max_seq_len, self.val_set.max_seq_len)
         self.val_set.max_seq_len = self.train_set.max_seq_len
 
@@ -313,13 +318,19 @@ class BinnedBaselineDataset(Dataset):
                  files: Sequence[Union[str, 'PathLike']],
                  im_transforms: Callable[[Any], torch.Tensor] = None,
                  augmentation: bool = False,
-                 batch_size: int = 32) -> None:
+                 batch_size: int = 32,
+                 pad_id: int = 0,
+                 bos_id: int = 1,
+                 eos_id: int = 2) -> None:
         self.files = files
         self.transforms = im_transforms
         self.aug = None
         self.batch_size = batch_size
         self.max_seq_len = 0
         self._len = 0
+        self.pad_id = pad_id
+        self.bos_id = bos_id
+        self.eos_id = eos_id
 
         self.arrow_table = None
 
@@ -360,9 +371,14 @@ class BinnedBaselineDataset(Dataset):
             im = torch.tensor(o['image'].transpose(2, 0, 1))
 
         # sample randomly between baselines
-        lines = [page_data[x] for x in rng.choice(len(page_data), self.batch_size, replace=True, shuffle=False)]
-        lines = [(torch.tensor(x['text'], dtype=torch.int32), torch.tensor(x['curve']).view(4, 2)) for x in lines]
-        return collate_sequences(im.unsqueeze(0), lines, self.max_seq_len)
+        sample = []
+        for x in rng.choice(len(page_data), self.batch_size, replace=True, shuffle=False):
+            line = page_data[x]
+            # filter out pad/bos/eos tokens and add them manually after
+            tokens = torch.tensor([self.bos_id] + [x for x in line['text'] if x>2] + [self.eos_id], dtype=torch.int32)
+            curve = torch.tensor(line['curve']).view(4, 2)
+            sample.append((tokens, curve))
+        return collate_sequences(im.unsqueeze(0), sample, self.max_seq_len)
 
     def __len__(self) -> int:
         return self._len // self.batch_size

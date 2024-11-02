@@ -21,6 +21,7 @@ import torch
 import logging
 import lightning.pytorch as L
 
+from torch import nn
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.utilities.memory import (garbage_collection_cuda,
                                                 is_oom_error)
@@ -28,41 +29,9 @@ from torch.optim import lr_scheduler
 #from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
-from party.decoder import T5VisionDecoderModel
+from party.fusion import bytellama_vision_decoder, PartyModel
 
 logger = logging.getLogger(__name__)
-
-
-class PartyModel(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.encoder = timm.create_model('vit_mediumd_patch16_reg4_gap_384.sbb2_e200_in12k_ft_in1k',
-                                         pretrained=True,
-                                         features_only=True,
-                                         img_size=(2560, 1920))
-
-        self.decoder = T5VisionDecoderModel.from_pretrained('google/byt5-small')
-        # disable caching during training
-        self.decoder.config.use_cache = False
-
-        encoder_dim = self.encoder.feature_info[-1]['num_chs']
-        decoder_dim = self.decoder.config.d_model
-        self.adapter = torch.nn.Identity() if encoder_dim == decoder_dim else torch.nn.Linear(encoder_dim, decoder_dim, bias = False)
-
-    def forward(self,
-                im: torch.FloatTensor,
-                curves: torch.FloatTensor,
-                labels: torch.FloatTensor):
-
-        encoder_hidden_states = self.encoder(im)[0]
-        b, _, _, e = encoder_hidden_states.shape
-        encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
-        encoder_hidden_states = self.adapter(encoder_hidden_states)
-        output = self.decoder(encoder_hidden_states=encoder_hidden_states,
-                              labels=labels,
-                              curves=curves)
-        return output.loss
-
 
 class RecognitionModel(L.LightningModule):
     """
@@ -92,21 +61,49 @@ class RecognitionModel(L.LightningModule):
         self.best_model = None
 
         self.save_hyperparameters()
+        encoder = timm.create_model('swin_tiny_patch4_window7_224.ms_in22k',
+                                    pretrained=True,
+                                    num_classes=0,
+                                    img_size=(2560, 1920),
+                                    global_pool='')
 
-        self.model = PartyModel()
+        decoder = bytellama_vision_decoder()
+
+        self.model = PartyModel(encoder=encoder,
+                                decoder=decoder,
+                                encoder_embed_dim=encoder.feature_info[-1]['num_chs'],
+                                decoder_embed_dim=decoder.tok_embeddings.num_embeddings)
+
         self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
         self.model.train()
+
+        self.criterion = nn.CrossEntropyLoss()
 
         #self.val_cer = CharErrorRate()
         #self.val_wer = WordErrorRate()
         self.val_mean = MeanMetric()
 
     def forward(self, x, curves):
-        return self.model(pixel_values=x, decoder_curves=curves)
+        return self.model(encoder_input=batch['image'],
+                          encoder_curves=batch['curves'])
 
     def _step(self, batch):
         try:
-            return self.model(batch['image'], batch['curves'], batch['target'])
+            # our tokens already contain BOS/EOS tokens so we just run it
+            # through the model
+            tokens = batch['tokens']
+            logits = self.model(tokens=tokens,
+                                encoder_input=batch['image'],
+                                encoder_curves=batch['curves'])
+
+            # shift the tokens to create targets
+            ignore_idxs = torch.full(tokens.shape[0],
+                                     self.criterion.ignore_index,
+                                     dtype=tokens.dtype, device=tokens.device)
+            targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
+            logits = logits.reshape(-1, logits.shape[-1])
+            # Compute loss
+            return self.criterion(logits, labels)
         except RuntimeError as e:
             if is_oom_error(e):
                 logger.warning('Out of memory error in trainer. Skipping batch and freeing caches.')
