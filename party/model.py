@@ -39,20 +39,23 @@ class RecognitionModel(L.LightningModule):
     recognition model.
     """
     def __init__(self,
-                 quit='fixed',
-                 lag=10,
-                 optimizer='AdamW',
-                 lr=1e-3,
-                 momentum=0.9,
-                 weight_decay=1e-3,
-                 schedule='cosine',
-                 step_size=10,
-                 gamma=0.1,
-                 rop_factor=0.1,
-                 rop_patience=5,
-                 cos_t_max=30,
-                 cos_min_lr=1e-4,
-                 warmup=15000,
+                 quit: Literal['fixed', 'early'] = 'fixed',
+                 lag: int = 10,
+                 optimizer: str = 'AdamW',
+                 lr: float = 1e-3,
+                 momentum: float = 0.9,
+                 weight_decay: float = 1e-3,
+                 schedule: Literal['cosine', 'exponential', 'step', 'reduceonplateau', 'constant'] = 'cosine',
+                 step_size: int = 10,
+                 gamma: float = 0.1,
+                 rop_factor: float = 0.1,
+                 rop_patience: int = 5,
+                 cos_t_max: float = 30,
+                 cos_min_lr: float = 1e-4,
+                 warmup: int = 15000,
+                 encoder: str = 'swin_base_patch4_window12_384.ms_in22k',
+                 encoder_input_size: Tuple[int, int] = (2560, 1920),
+                 decoder: str = 'mittagessen/bytellama_random',
                  **kwargs):
         super().__init__()
 
@@ -61,16 +64,16 @@ class RecognitionModel(L.LightningModule):
         self.best_model = None
 
         self.save_hyperparameters()
-        encoder = timm.create_model('swin_base_patch4_window12_384.ms_in22k',
-                                    pretrained=True,
-                                    num_classes=0,
-                                    img_size=(2560, 1920),
-                                    global_pool='')
+        encoder_model = timm.create_model(encoder,
+                                          pretrained=True,
+                                          num_classes=0,
+                                          img_size=encoder_input_size,
+                                          global_pool='')
 
-        decoder = bytellama_vision_decoder()
+        decoder_model = bytellama_vision_decoder(decoder)
 
-        self.model = PartyModel(encoder=encoder,
-                                decoder=decoder,
+        self.model = PartyModel(encoder=encoder_model,
+                                decoder=decoder_model,
                                 encoder_embed_dim=encoder.feature_info[-1]['num_chs'],
                                 decoder_embed_dim=decoder.tok_embeddings.embedding_dim)
 

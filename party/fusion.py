@@ -19,6 +19,7 @@ import copy
 import logging
 from typing import Optional, Tuple, Union, List
 
+import json
 import torch
 from torch import nn
 
@@ -35,7 +36,6 @@ from torchtune.modules import TiedLinear
 from torchtune.modules.model_fusion import FusionLayer
 
 from party.prompt import PromptEncoder
-
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,8 @@ def bytellama_vision_decoder(vocab_size: int = 259,
                              rope_base: int = 10000,
                              scale_factor: int = 32,
                              encoder_max_seq_len: int = 4800,  # start of fusion parameters
-                             fusion_interval: int = 3) -> TransformerDecoder:
+                             fusion_interval: int = 3,
+                             pretrained: Optional[str] = None) -> TransformerDecoder:
     """
     Builds a vision decoder from a ByteLlama model with additional fused cross
     attention layers. This includes:
@@ -80,33 +81,55 @@ def bytellama_vision_decoder(vocab_size: int = 259,
         encoder_max_seq_len (int): maximum sequence length the encoder will be run with, as used
             by :func:`~torchtune.modules.KVCache`.
         fusion_interval (int): interval number of layers between fusion layers.
+        pretrained (str): huggingface hub identifier of pretrained bytellama
+                          weights. All hyperparameters will except
+                          encoder_max_seq_len will be ignored.
 
     Returns:
         TransformerDecoder: Instantiation of Llama 3.2 vision decoder.
     """
-    head_dim = embed_dim // num_heads
-    num_kv_heads = num_kv_heads if num_kv_heads else num_heads
-    hidden_dim = intermediate_dim or scale_hidden_dim_for_mlp(embed_dim)
+    config = {'vocab_size': vocab_size,
+              'num_layers': num_layers,
+              'num_heads': num_heads,
+              'num_kv_heads': num_kv_heads,
+              'embed_dim': embed_dim,
+              'max_seq_len': max_seq_len,
+              'intermediate_dim': intermediate_dim,
+              'attn_dropout': attn_dropout,
+              'norm_eps': norm_eps,
+              'rope_base': rope_base,
+              'scale_factor': scale_factor,
+              'encoder_max_seq_len': encoder_max_seq_len,
+              'fusion_interval': fusion_interval}
+
+    if pretrained:
+        from huggingface_hub import hf_hub_download
+        with open(hf_hub_download(repo_id=pretrained, filename='config.json'), 'r') as fp:
+            config.update(json.load(fp))
+
+    head_dim = config['embed_dim'] // config['num_heads']
+    num_kv_heads = config['num_kv_heads'] if config['num_kv_heads'] else config['num_heads']
+    hidden_dim = config['intermediate_dim'] or scale_hidden_dim_for_mlp(config['embed_dim'])
     layers = []
 
-    rope = Llama3ScaledRoPE(dim=head_dim, max_seq_len=max_seq_len, base=rope_base)
+    rope = Llama3ScaledRoPE(dim=head_dim, max_seq_len=config['max_seq_len'], base=config['rope_base'])
     for idx in range(1, num_layers + 1):
 
         # Self attention layers for text decoder
         self_attn = MultiHeadAttention(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
+            embed_dim=config['embed_dim'],
+            num_heads=config['num_heads'],
             num_kv_heads=num_kv_heads,
             head_dim=head_dim,
-            q_proj=nn.Linear(embed_dim, num_heads * head_dim, bias=False),
-            k_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=False),
-            v_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=False),
-            output_proj=nn.Linear(embed_dim, embed_dim, bias=False),
+            q_proj=nn.Linear(config['embed_dim'], config['num_heads'] * head_dim, bias=False),
+            k_proj=nn.Linear(config['embed_dim'], num_kv_heads * head_dim, bias=False),
+            v_proj=nn.Linear(config['embed_dim'], num_kv_heads * head_dim, bias=False),
+            output_proj=nn.Linear(config['embed_dim'], config['embed_dim'], bias=False),
             pos_embeddings=rope,
-            max_seq_len=max_seq_len,
+            max_seq_len=config['max_seq_len'],
             attn_dropout=0.0,
         )
-        mlp = llama3_mlp(dim=embed_dim, hidden_dim=hidden_dim)
+        mlp = llama3_mlp(dim=config['embed_dim'], hidden_dim=hidden_dim)
         decoder_layer = TransformerSelfAttentionLayer(
             attn=self_attn,
             mlp=mlp,
@@ -116,24 +139,25 @@ def bytellama_vision_decoder(vocab_size: int = 259,
 
         # cross attention layers, mixing text and vision,
         # placed every `fusion_interval` layers
-        if idx % fusion_interval == 0:
+        if idx % config['fusion_interval'] == 0:
             attn = MultiHeadAttention(
-                embed_dim=embed_dim,
+                embed_dim=config['embed_dim'],
                 num_heads=num_heads,
                 num_kv_heads=num_kv_heads,
                 head_dim=head_dim,
-                q_proj=nn.Linear(embed_dim, num_heads * head_dim, bias=False),
-                k_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=False),
-                v_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=False),
-                output_proj=nn.Linear(embed_dim, embed_dim, bias=False),
+                q_proj=nn.Linear(config['embed_dim'], config['num_heads'] * head_dim, bias=False),
+                k_proj=nn.Linear(config['embed_dim'], num_kv_heads * head_dim, bias=False),
+                v_proj=nn.Linear(config['embed_dim'], num_kv_heads * head_dim, bias=False),
+                output_proj=nn.Linear(config['embed_dim'], config['embed_dim'], bias=False),
                 q_norm=RMSNorm(dim=head_dim, eps=1e-05),
                 k_norm=RMSNorm(dim=head_dim, eps=1e-05),
                 pos_embeddings=None,
-                max_seq_len=encoder_max_seq_len,
+                max_seq_len=config['encoder_max_seq_len'],
                 is_causal=False,
                 attn_dropout=0.0,
             )
-            mlp = llama3_mlp(dim=embed_dim, hidden_dim=hidden_dim)
+
+            mlp = llama3_mlp(dim=config['embed_dim'], hidden_dim=hidden_dim)
             xattn_layer = TransformerCrossAttentionLayer(
                 attn=attn,
                 mlp=mlp,
@@ -147,19 +171,25 @@ def bytellama_vision_decoder(vocab_size: int = 259,
         else:
             layers.append(decoder_layer)
 
-    tok_embeddings = nn.Embedding(vocab_size, embed_dim)
+    tok_embeddings = nn.Embedding(config['vocab_size'], config['embed_dim'])
     output_proj = TiedLinear(tok_embeddings)
 
-    return TransformerDecoder(
-        tok_embeddings=tok_embeddings,
-        layers=layers,
-        max_seq_len=max_seq_len,
-        num_heads=num_heads,
-        head_dim=head_dim,
-        norm=RMSNorm(embed_dim, eps=1e-05),
-        output=output_proj,
-    )
+    decoder = TransformerDecoder(tok_embeddings=tok_embeddings,
+                                 layers=layers,
+                                 max_seq_len=config['max_seq_len'],
+                                 num_heads=config['num_heads'],
+                                 head_dim=head_dim,
+                                 norm=RMSNorm(config['embed_dim'], eps=1e-05),
+                                 output=output_proj)
 
+    if pretrained:
+        weight_path = hf_hub_download(repo_id=pretrained, filename='model.safetensors')
+        from safetensors import safe_open
+        with safe_open(weight_path, framework='pt') as f:
+            state_dict = {k: f.get_tensor(k) for k in f.keys()}
+        decoder.load_state_dict(state_dict, strict=False)
+
+    return decoder
 
 def party_adapter(num_layers: int,
                   num_heads: int,
