@@ -55,7 +55,7 @@ class RecognitionModel(L.LightningModule):
                  warmup: int = 15000,
                  encoder: str = 'swin_base_patch4_window12_384.ms_in22k',
                  encoder_input_size: Tuple[int, int] = (2560, 1920),
-                 decoder: str = 'mittagessen/bytellama_random',
+                 decoder: str = 'mittagessen/bytellama_oscar',
                  **kwargs):
         super().__init__()
 
