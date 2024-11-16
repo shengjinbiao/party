@@ -35,7 +35,6 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
 from scipy.special import comb
-from shapely.geometry import LineString
 
 from party.tokenizer import OctetTokenizer
 
@@ -55,6 +54,8 @@ def _to_curve(baseline, im_size, min_points: int = 8) -> torch.Tensor:
     """
     Converts poly(base)lines to Bezier curves.
     """
+    from shapely.geometry import LineString
+
     baseline = np.array(baseline)
     if len(baseline) < min_points:
         ls = LineString(baseline)
