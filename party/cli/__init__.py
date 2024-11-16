@@ -7,8 +7,6 @@ from rich.logging import RichHandler
 from rich.traceback import install
 
 from .train import train, compile
-from .test import test
-from .pred import ocr
 
 
 def set_logger(logger=None, level=logging.ERROR):
@@ -69,8 +67,6 @@ def cli(ctx, verbose, seed, deterministic, device, precision, autocast):
 
 cli.add_command(compile)
 cli.add_command(train)
-cli.add_command(test)
-cli.add_command(ocr)
 
 if __name__ == '__main__':
     cli()
