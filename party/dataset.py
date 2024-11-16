@@ -37,9 +37,6 @@ from PIL import Image
 from scipy.special import comb
 from shapely.geometry import LineString
 
-from kraken.lib import functional_im_transforms as F_t
-from kraken.lib.xml import XMLPage
-
 from party.tokenizer import OctetTokenizer
 
 if TYPE_CHECKING:
@@ -103,6 +100,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
         max_line_tokens: maximum number of tokens per line
         callback: progress callback
     """
+    from kraken.lib import functional_im_transforms as F_t
+    from kraken.lib.xml import XMLPage
+
     text_transforms: List[Callable[[str], str]] = []
 
     # pyarrow structs
