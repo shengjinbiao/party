@@ -46,7 +46,7 @@ Image.MAX_IMAGE_PIXELS = 20000 ** 2
 @click.option('--precision',
               show_default=True,
               default='32',
-              type=click.Choice(['64', '32', 'bf16', '16']),
+              type=click.Choice(['transformer-engine', 'transformer-engine-float16', '16-true', '16-mixed', 'bf16-true', 'bf16-mixed', '32-true', '64-true']),
               help='Numerical precision to use for training. Default is 32-bit single-point precision.')
 @click.option('-2', '--autocast', default=False, show_default=True, flag_value=True,
               help='On compatible devices, uses autocast for `segment` which lower the memory usage.')
