@@ -29,6 +29,8 @@ from torch.optim import lr_scheduler
 #from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
+from typing import Literal, Tuple
+
 from party.fusion import bytellama_vision_decoder, PartyModel
 
 logger = logging.getLogger(__name__)
