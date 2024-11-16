@@ -72,7 +72,7 @@ class RecognitionModel(L.LightningModule):
                                           img_size=encoder_input_size,
                                           global_pool='')
 
-        decoder_model = bytellama_vision_decoder(decoder)
+        decoder_model = bytellama_vision_decoder(pretrained=decoder)
 
         self.model = PartyModel(encoder=encoder_model,
                                 decoder=decoder_model,
