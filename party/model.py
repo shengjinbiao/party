@@ -94,6 +94,7 @@ class RecognitionModel(L.LightningModule):
 
     def _step(self, batch):
         try:
+            tokens = batch['tokens']
             # shift the tokens to create targets
             ignore_idxs = torch.full((tokens.shape[0], 1),
                                      self.criterion.ignore_index,
@@ -102,7 +103,6 @@ class RecognitionModel(L.LightningModule):
 
             # our tokens already contain BOS/EOS tokens so we just run it
             # through the model after replacing ignored indices.
-            tokens = batch['tokens']
             tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
             logits = self.model(tokens=tokens,
                                 encoder_input=batch['image'],
