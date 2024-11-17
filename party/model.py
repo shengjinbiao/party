@@ -94,18 +94,20 @@ class RecognitionModel(L.LightningModule):
 
     def _step(self, batch):
         try:
-            # our tokens already contain BOS/EOS tokens so we just run it
-            # through the model
-            tokens = batch['tokens']
-            logits = self.model(tokens=tokens,
-                                encoder_input=batch['image'],
-                                encoder_curves=batch['curves'])
-
             # shift the tokens to create targets
             ignore_idxs = torch.full((tokens.shape[0], 1),
                                      self.criterion.ignore_index,
                                      dtype=tokens.dtype, device=tokens.device)
             targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
+
+            # our tokens already contain BOS/EOS tokens so we just run it
+            # through the model after replacing ignored indices.
+            tokens = batch['tokens']
+            tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
+            logits = self.model(tokens=tokens,
+                                encoder_input=batch['image'],
+                                encoder_curves=batch['curves'])
+
             logits = logits.reshape(-1, logits.shape[-1])
             # Compute loss
             return self.criterion(logits, targets)
