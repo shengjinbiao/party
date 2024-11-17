@@ -79,7 +79,7 @@ class RecognitionModel(L.LightningModule):
                                 encoder_embed_dim=encoder_model.feature_info[-1]['num_chs'],
                                 decoder_embed_dim=decoder_model.tok_embeddings.embedding_dim)
 
-        self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
+        self.model = torch.compile(self.model)
         self.model.train()
 
         self.criterion = nn.CrossEntropyLoss()
