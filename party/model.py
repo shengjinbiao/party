@@ -148,8 +148,8 @@ class RecognitionModel(L.LightningModule):
         #self.log('val_accuracy', accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         #self.log('val_word_accuracy', word_accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         if not self.trainer.sanity_checking:
-            self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True)
-            self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+            self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+            self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
         self.val_mean.reset()
 
         #self.val_cer.reset()
