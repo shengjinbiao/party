@@ -321,6 +321,7 @@ class BinnedBaselineDataset(Dataset):
                  pad_id: int = 0,
                  bos_id: int = 1,
                  eos_id: int = 2) -> None:
+        super().__init__()
         self.files = files
         self.transforms = im_transforms
         self.aug = None
