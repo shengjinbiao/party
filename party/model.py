@@ -35,6 +35,7 @@ from party.fusion import bytellama_vision_decoder, PartyModel
 
 logger = logging.getLogger(__name__)
 
+
 class RecognitionModel(L.LightningModule):
     """
     A LightningModule encapsulating the training setup for a text
@@ -125,7 +126,6 @@ class RecognitionModel(L.LightningModule):
                      loss,
                      batch_size=batch['tokens'].shape[0],
                      on_step=True,
-                     on_epoch=True,
                      prog_bar=True,
                      logger=True)
         return loss

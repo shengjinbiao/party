@@ -17,7 +17,7 @@
 
 import copy
 import logging
-from typing import Optional, Tuple, Union, List
+from typing import Generator, Optional, Tuple, Union, List
 
 import json
 import torch
@@ -232,6 +232,7 @@ def party_adapter(num_layers: int,
     return nn.Sequential(*layers)
 
 
+
 class PartyModel(nn.Module):
     """
     The party fusion model.
@@ -311,19 +312,26 @@ class PartyModel(nn.Module):
                 tokens: torch.Tensor,
                 *,
                 encoder_input: Optional[torch.Tensor] = None,
+                encoder_hidden_states: Optional[torch.Tensor] = None,
                 encoder_curves: Optional[torch.Tensor] = None,
+                encoder_mask: Optional[torch.Tensor] = None,
+                mask: Optional[torch.Tensor] = None,
                 input_pos: Optional[torch.Tensor] = None) -> Union[torch.Tensor, List[torch.Tensor]]:
         """
         Args:
             tokens (torch.Tensor): input tensor with shape ``[b x s]``
-            encoder_input (Optional[Dict]): Optional input for the encoder.
-            encoder_curves (Optional[Dict]): Optional curves to be embedded and
-                                             added to encoder embeddings.
-            input_pos (Optional[torch.Tensor]): Optional tensor which contains the position ids
-                of each token. During training, this is used to indicate the positions
-                of each token relative to its sample when packed, shape ``[b x s]``.
-                During inference, this indicates the position of the current token.
-                If none, assume the index of the token is its position id. Default is None.
+            encoder_input: Optional input for the encoder.
+            encoder_hidden_states: Optional encoder embeddings with curve
+                                   embeddings already added.
+            encoder_curves: Optional curves to be embedded and added to encoder
+                            embeddings.
+            input_pos: Optional tensor which contains the position ids of each
+                       token. During training, this is used to indicate the
+                       positions of each token relative to its sample when
+                       packed, shape ``[b x s]``.  During inference, this
+                       indicates the position of the current token.  If none,
+                       assume the index of the token is its position id.
+                       Default is None.
 
         Note: At the very first step of inference, when the model is provided with a prompt,
         ``input_pos`` would contain the positions of all of the tokens in the prompt
@@ -347,12 +355,8 @@ class PartyModel(nn.Module):
         # During decoding, encoder_input will only be provided
         # for new inputs. Previous encoder outputs are cached
         # in the decoder cache.
-        encoder_hidden_states = None
         if encoder_input is not None:
-            encoder_hidden_states = self.encoder(encoder_input)
-            b, e = encoder_hidden_states.shape[0], encoder_hidden_states.shape[-1]
-            encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
-            encoder_hidden_states = self.adapter(encoder_hidden_states)
+            encoder_hidden_states = self.forward_encoder_embeddings(encoder_input)
             # expand encoder_hidden_states from (1, s_e, d) to (b, s_e, d)
             encoder_hidden_states = encoder_hidden_states.repeat(tokens.size(0), 1, 1)
 
@@ -361,8 +365,126 @@ class PartyModel(nn.Module):
             encoder_hidden_states = encoder_hidden_states + curve_embeds
 
         output = self.decoder(tokens=tokens,
-                              mask=None,
+                              mask=mask,
                               encoder_input=encoder_hidden_states,
-                              encoder_mask=None,
+                              encoder_mask=encoder_mask,
                               input_pos=input_pos)
         return output
+
+    def forward_encoder_embeddings(self, encoder_input):
+        """
+        Computes the encoder embeddings *without* adding the curve positional
+        embeddings.
+        """
+        encoder_hidden_states = self.encoder(encoder_input)
+        b, e = encoder_hidden_states.shape[0], encoder_hidden_states.shape[-1]
+        encoder_hidden_states = encoder_hidden_states.view(b, -1, e)
+        return self.adapter(encoder_hidden_states)
+
+    @torch.inference_mode()
+    def predict(self,
+                encoder_input: torch.FloatTensor,
+                curves: torch.FloatTensor,
+                batch_size: int = 8,
+                max_generated_tokens: int = 384,
+                bos_id: int = 1,
+                eos_id: int = 2) -> Generator[Tuple[torch.Tensor, torch.FloatTensor], None, None]:
+        """
+        Predicts text from an input page image and a number of quadratic Bézier
+        curves.
+
+        Args:
+            encoder_input: Image input for the encoder with shape ``[1 x c x h x w]``
+            curves: Curves to be embedded and added to the encoder embeddings (``n x 8``)
+            batch_size: Number of curves to generate text for simultaneously.
+            bos_id: BOS ID of tokenizer
+            eos_id: EOS ID of tokenizer
+
+        Yields:
+            Tuples of two tensors:
+                - tokens: tensor with generated text tokens of shape ``n x gen_len``
+                - logits: tensor with the logits associated with the generated
+                          tokens. The shape will be ``n x  gen_len x vocab_size``
+        """
+        # generate a regular causal mask
+        masks = torch.tril(torch.ones(max_generated_tokens,
+                                      max_generated_tokens,
+                                      dtype=torch.bool,
+                                      device=curves.device)).unsqueeze(0)
+        input_pos = torch.arange(0, max_generated_tokens, device=curves.device).unsqueeze(0)
+
+        encoder_hidden_states = self.forward_encoder_embeddings(encoder_input)
+
+        eos_token = torch.tensor(eos_id, device=curves.device, dtype=torch.long)
+
+        batches = torch.split(curves, batch_size)
+
+        # Mask is shape (batch_size, max_seq_len, image_embedding_len)
+        encoder_mask = torch.ones((batch_size,
+                                   1,
+                                   encoder_hidden_states.size(1)),
+                                  dtype=torch.bool,
+                                  device=curves.device)
+
+        # set up caches
+        self.setup_caches(batch_size=batch_size,
+                          encoder_max_seq_len=encoder_hidden_states.size(1),
+                          decoder_max_seq_len=max_generated_tokens,
+                          dtype=encoder_hidden_states.dtype)
+
+        for batch_idx, batch in enumerate(batches):
+            # reinitialize caches if last batch is incomplete
+            if batch.size(0) != batch_size:
+                # set up caches
+                self.setup_caches(batch_size=batch.size(0),
+                                  encoder_max_seq_len=encoder_hidden_states.size(1),
+                                  decoder_max_seq_len=max_generated_tokens,
+                                  dtype=encoder_hidden_states.dtype)
+
+            logger.info(f'Processing batch {batch_idx} of {len(batches)}')
+            # expand encoder embeddings to actual batch size
+            exp_encoder_hidden_states = encoder_hidden_states.repeat(batch.size(0), 1, 1)
+
+            # add curve embeddings to encoder hidden states
+            curve_embeds = self.curve_embedding(batch).unsqueeze(1).expand(-1, exp_encoder_hidden_states.size(1), -1)
+            exp_encoder_hidden_states = exp_encoder_hidden_states + curve_embeds
+
+            # create batch size number of BOS tokens
+            prompt = torch.full((batch.size(0), 1), bos_id, device=curves.device, dtype=torch.long)
+            # prefill step
+            curr_masks = masks[:, :1]
+            logits = self.forward(tokens=prompt,
+                                  encoder_hidden_states=exp_encoder_hidden_states,
+                                  encoder_mask=encoder_mask[:batch.size(0), ...],
+                                  mask=curr_masks,
+                                  input_pos=input_pos[:, :1].squeeze())
+            tokens = torch.argmax(logits, dim=-1)
+            generated_tokens = [tokens[:, -1]]
+
+            curr_pos = 1
+
+            # keeps track of EOS tokens emitted by each sequence in a batch
+            eos_token_reached = torch.zeros(batch.size(0), dtype=torch.bool, device=curves.device)
+            eos_token_reached |= tokens[:, -1] == eos_token
+
+            if eos_token_reached.all():
+                break
+
+            for _ in range(max_generated_tokens - 1):
+                curr_input_pos = input_pos[:, curr_pos]
+                curr_masks = masks[:, curr_pos, None, :]
+
+                # no need for encoder embeddings anymore as they're in the cache now
+                logits = self.forward(tokens=tokens.clone(),
+                                      mask=curr_masks,
+                                      input_pos=curr_input_pos)
+                tokens = torch.argmax(logits, dim=-1)
+                logger.info(f'Generated {tokens[:, -1]}')
+                generated_tokens.append(tokens[:, -1])
+                curr_pos += 1
+
+                eos_token_reached |= tokens[:, -1] == eos_token
+                if eos_token_reached.all():
+                    break
+
+            yield torch.stack(generated_tokens).T
