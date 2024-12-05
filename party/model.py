@@ -67,17 +67,25 @@ class RecognitionModel(L.LightningModule):
         self.best_model = None
 
         self.save_hyperparameters()
+
+        # enable fused attn in encoder
+        timm.layers.use_fused_attn(experimental=True)
+
         encoder_model = timm.create_model(encoder,
                                           pretrained=True,
                                           num_classes=0,
                                           img_size=encoder_input_size,
                                           global_pool='')
 
-        decoder_model = bytellama_vision_decoder(pretrained=decoder)
+        l_idx = encoder_model.prune_intermediate_layers(indices=(-2,), prune_head=True, prune_norm=True)[0]
+        l_red = encoder_model.feature_info[l_idx]['reduction']
+
+        decoder_model = bytellama_vision_decoder(pretrained=decoder,
+                                                 encoder_max_seq_len=encoder_input_size[0] // l_red * encoder_input_size[1] // l_red)
 
         self.model = PartyModel(encoder=encoder_model,
                                 decoder=decoder_model,
-                                encoder_embed_dim=encoder_model.feature_info[-1]['num_chs'],
+                                encoder_embed_dim=encoder_model.feature_info[l_idx]['num_chs'],
                                 decoder_embed_dim=decoder_model.tok_embeddings.embedding_dim)
 
         self.model = torch.compile(self.model)
