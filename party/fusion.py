@@ -232,7 +232,6 @@ def party_adapter(num_layers: int,
     return nn.Sequential(*layers)
 
 
-
 class PartyModel(nn.Module):
     """
     The party fusion model.
@@ -260,6 +259,44 @@ class PartyModel(nn.Module):
                                      decoder_embed_dim)
 
         self.curve_embedding = PromptEncoder(decoder_embed_dim)
+
+    @classmethod
+    def from_huggingface(cls, pretrained: str = 'mittagessen/llama_party') -> 'PartyModel':
+        """
+        Loads a pretrained model from huggingface.
+        """
+        import timm
+        from huggingface_hub import hf_hub_download
+        with open(hf_hub_download(repo_id=pretrained, filename='config.json'), 'r') as fp:
+            config = json.load(fp)
+            encoder_config = {k[8:]: v for k, v in config.items() if k.startswith('encoder_')}
+            decoder_config = {k[8:]: v for k, v in config.items() if k.startswith('decoder_')}
+
+        # enable fused attn in encoder
+        timm.layers.use_fused_attn(experimental=True)
+
+        encoder_model = timm.create_model(encoder_config['name'],
+                                          pretrained=False,
+                                          num_classes=0,
+                                          img_size=encoder_config['input_size'],
+                                          global_pool='')
+
+        l_idx = encoder_model.prune_intermediate_layers(indices=(-2,), prune_head=True, prune_norm=True)[0]
+
+        decoder_model = bytellama_vision_decoder(**decoder_config)
+
+        model = cls(encoder=encoder_model,
+                    decoder=decoder_model,
+                    encoder_embed_dim=encoder_model.feature_info[l_idx]['num_chs'],
+                    decoder_embed_dim=decoder_model.tok_embeddings.embedding_dim)
+
+        weight_path = hf_hub_download(repo_id=pretrained, filename='model.safetensors')
+        from safetensors import safe_open
+        with safe_open(weight_path, framework='pt') as f:
+            state_dict = {k: f.get_tensor(k) for k in f.keys()}
+        model.load_state_dict(state_dict, strict=False)
+
+        return model
 
     def setup_caches(self,
                      batch_size: int,
@@ -440,6 +477,8 @@ class PartyModel(nn.Module):
                                   encoder_max_seq_len=encoder_hidden_states.size(1),
                                   decoder_max_seq_len=max_generated_tokens,
                                   dtype=encoder_hidden_states.dtype)
+
+            self.reset_caches()
 
             logger.info(f'Processing batch {batch_idx} of {len(batches)}')
             # expand encoder embeddings to actual batch size
