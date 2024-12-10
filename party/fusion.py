@@ -21,6 +21,7 @@ from typing import Generator, Optional, Tuple, Union, List
 
 import json
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from torchtune.models.llama3._model_utils import scale_hidden_dim_for_mlp
@@ -36,10 +37,11 @@ from torchtune.modules import TiedLinear
 from torchtune.modules.model_fusion import FusionLayer
 
 from party.prompt import PromptEncoder
+from party.tokenizer import OctetTokenizer
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['bytellama_vision_decoder']
+__all__ = ['bytellama_vision_decoder', 'PartyModel']
 
 
 def bytellama_vision_decoder(vocab_size: int = 259,
@@ -260,6 +262,9 @@ class PartyModel(nn.Module):
 
         self.curve_embedding = PromptEncoder(decoder_embed_dim)
 
+        self.ready_for_generation = False
+
+
     @classmethod
     def from_huggingface(cls, pretrained: str = 'mittagessen/llama_party') -> 'PartyModel':
         """
@@ -419,99 +424,120 @@ class PartyModel(nn.Module):
         return self.adapter(encoder_hidden_states)
 
     @torch.inference_mode()
-    def predict(self,
-                encoder_input: torch.FloatTensor,
-                curves: torch.FloatTensor,
-                batch_size: int = 8,
-                max_generated_tokens: int = 384,
-                bos_id: int = 1,
-                eos_id: int = 2) -> Generator[Tuple[torch.Tensor, torch.FloatTensor], None, None]:
+    def prepare_for_generation(self,
+                               bos_id: int = 1,
+                               batch_size: int = 8,
+                               max_encoder_seq_len: int = 19200,
+                               max_generated_tokens: int = 384,
+                               device = 'cpu'):
+
+        if self.ready_for_generation:
+            raise ValueError('Model has already been prepared for generation!')
+
+        self._batch_size = batch_size
+        self._max_generated_tokens = max_generated_tokens
+
+         # generate a regular causal mask
+        self._masks = torch.tril(torch.ones(max_generated_tokens,
+                                            max_generated_tokens,
+                                            dtype=torch.bool,
+                                            device=device)).unsqueeze(0)
+        self._input_pos = torch.arange(0, max_generated_tokens, device=device).unsqueeze(0)
+
+        # set up caches
+        self.setup_caches(batch_size=batch_size,
+                          encoder_max_seq_len=max_encoder_seq_len,
+                          decoder_max_seq_len=max_generated_tokens,
+                          dtype=next(self.encoder.parameters()).dtype)
+
+        # create batch size number of BOS tokens
+        self._prompt = torch.full((batch_size, 1), bos_id, device=device, dtype=torch.long)
+        self.ready_for_generation = True
+
+
+    @torch.inference_mode()
+    def predict_tokens(self,
+                       encoder_input: torch.FloatTensor,
+                       curves: torch.FloatTensor,
+                       eos_id: int = 2) -> Generator[torch.Tensor, None, None]:
         """
         Predicts text from an input page image and a number of quadratic Bézier
         curves.
 
         Args:
-            encoder_input: Image input for the encoder with shape ``[1 x c x h x w]``
-            curves: Curves to be embedded and added to the encoder embeddings (``n x 8``)
+            encoder_input: Image input for the encoder with shape ``1 x c x h x w``
+            curves: Curves to be embedded and added to the encoder embeddings (``n x 4 x 2``)
             batch_size: Number of curves to generate text for simultaneously.
-            bos_id: BOS ID of tokenizer
             eos_id: EOS ID of tokenizer
 
         Yields:
-            Tuples of two tensors:
-                - tokens: tensor with generated text tokens of shape ``n x gen_len``
-                - logits: tensor with the logits associated with the generated
-                          tokens. The shape will be ``n x  gen_len x vocab_size``
+            A tensor of integer labels with shape ``n x s`` where ``s` is the
+            length of the longest generated sequence or `max_generated_tokens`.
+            BOS and EOS have already been stripped from the token sequences.
+            Entries beyond the EOS are padded with zeroes.
         """
-        # generate a regular causal mask
-        masks = torch.tril(torch.ones(max_generated_tokens,
-                                      max_generated_tokens,
-                                      dtype=torch.bool,
-                                      device=curves.device)).unsqueeze(0)
-        input_pos = torch.arange(0, max_generated_tokens, device=curves.device).unsqueeze(0)
+        logger.info(f'Computing encoder embeddings')
 
-        encoder_hidden_states = self.forward_encoder_embeddings(encoder_input)
+        encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
 
         eos_token = torch.tensor(eos_id, device=curves.device, dtype=torch.long)
 
-        batches = torch.split(curves, batch_size)
+        batches = torch.split(curves, self._batch_size)
 
         # Mask is shape (batch_size, max_seq_len, image_embedding_len)
-        encoder_mask = torch.ones((batch_size,
+        encoder_mask = torch.ones((self._batch_size,
                                    1,
                                    encoder_hidden_states.size(1)),
                                   dtype=torch.bool,
                                   device=curves.device)
 
-        # set up caches
-        self.setup_caches(batch_size=batch_size,
-                          encoder_max_seq_len=encoder_hidden_states.size(1),
-                          decoder_max_seq_len=max_generated_tokens,
-                          dtype=encoder_hidden_states.dtype)
-
         for batch_idx, batch in enumerate(batches):
-            # reinitialize caches if last batch is incomplete
-            if batch.size(0) != batch_size:
-                # set up caches
-                self.setup_caches(batch_size=batch.size(0),
-                                  encoder_max_seq_len=encoder_hidden_states.size(1),
-                                  decoder_max_seq_len=max_generated_tokens,
-                                  dtype=encoder_hidden_states.dtype)
+            # pad batch to full size if last batch is incomplete
+            pad_size = 0
+            if batch.size(0) != self._batch_size:
+                pad_size = self._batch_size - batch.size(0)
+                batch = F.pad(batch, (0, 0, 0, 0, 0, pad_size))
 
             self.reset_caches()
 
             logger.info(f'Processing batch {batch_idx} of {len(batches)}')
-            # expand encoder embeddings to actual batch size
-            exp_encoder_hidden_states = encoder_hidden_states.repeat(batch.size(0), 1, 1)
 
             # add curve embeddings to encoder hidden states
-            curve_embeds = self.curve_embedding(batch).unsqueeze(1).expand(-1, exp_encoder_hidden_states.size(1), -1)
-            exp_encoder_hidden_states = exp_encoder_hidden_states + curve_embeds
+            curve_embeds = self.curve_embedding(batch).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
+            exp_encoder_hidden_states = encoder_hidden_states + curve_embeds
 
-            # create batch size number of BOS tokens
-            prompt = torch.full((batch.size(0), 1), bos_id, device=curves.device, dtype=torch.long)
             # prefill step
-            curr_masks = masks[:, :1]
-            logits = self.forward(tokens=prompt,
+            curr_masks = self._masks[:, :1]
+            logits = self.forward(tokens=self._prompt,
                                   encoder_hidden_states=exp_encoder_hidden_states,
-                                  encoder_mask=encoder_mask[:batch.size(0), ...],
+                                  encoder_mask=encoder_mask[:self._batch_size, ...],
                                   mask=curr_masks,
-                                  input_pos=input_pos[:, :1].squeeze())
+                                  input_pos=self._input_pos[:, :1].squeeze())
             tokens = torch.argmax(logits, dim=-1)
             generated_tokens = [tokens[:, -1]]
 
             curr_pos = 1
 
             # keeps track of EOS tokens emitted by each sequence in a batch
-            eos_token_reached = torch.zeros(batch.size(0), dtype=torch.bool, device=curves.device)
+            eos_token_reached = torch.zeros(self._batch_size, dtype=torch.bool, device=curves.device)
             eos_token_reached |= tokens[:, -1] == eos_token
+
+            # mask used for setting all values from EOS token to pad_id in output sequences.
+            eos_token_mask = torch.ones(self._batch_size, 0, dtype=torch.int32, device=curves.device)
+
+            # set padding sequences to empty
+            if pad_size:
+                eos_token_reached[-pad_size:] = True
 
             if eos_token_reached.all():
                 break
 
-            for _ in range(max_generated_tokens - 1):
-                curr_input_pos = input_pos[:, curr_pos]
-                curr_masks = masks[:, curr_pos, None, :]
+            for _ in range(self._max_generated_tokens - 1):
+                # update eos_token_mask if an EOS token was emitted in a previous step
+                eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(self._batch_size, 1)], dim=-1)
+
+                curr_input_pos = self._input_pos[:, curr_pos]
+                curr_masks = self._masks[:, curr_pos, None, :]
 
                 # no need for encoder embeddings anymore as they're in the cache now
                 logits = self.forward(tokens=tokens.clone(),
@@ -526,4 +552,35 @@ class PartyModel(nn.Module):
                 if eos_token_reached.all():
                     break
 
-            yield torch.stack(generated_tokens).T
+            eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(self._batch_size, 1)], dim=-1)
+
+            # mask out generated tokens beyond EOS token
+            generated_tokens = torch.stack(generated_tokens).T
+            generated_tokens *= eos_token_mask
+
+            yield generated_tokens[:self._batch_size-pad_size, :-1]
+
+    @torch.inference_mode
+    def predict_string(self,
+                       encoder_input: torch.FloatTensor,
+                       curves: torch.FloatTensor,
+                       eos_id: int = 2) -> Generator[str, None, None]:
+        """
+        Predicts text from an input page image and a number of quadratic Bézier
+        curves.
+
+        Args:
+            encoder_input: Image input for the encoder with shape ``[1 x c x h x w]``
+            curves: Curves to be embedded and added to the encoder embeddings (``n x 4 x 2``)
+            batch_size: Number of curves to generate text for simultaneously.
+            eos_id: EOS ID of tokenizer
+
+        Yields:
+
+        """
+        tokenizer = OctetTokenizer()
+        for preds in self.predict_tokens(encoder_input=encoder_input,
+                                        curves=curves,
+                                        eos_id=eos_id):
+            for pred in preds:
+                yield tokenizer.decode(pred[pred != 0])
