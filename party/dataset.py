@@ -50,7 +50,14 @@ logger = logging.getLogger(__name__)
 Image.MAX_IMAGE_PIXELS = 20000 ** 2
 
 
-def _to_curve(baseline, im_size, min_points: int = 8) -> torch.Tensor:
+def get_default_transforms():
+    return v2.Compose([v2.Resize((2560, 1920)),
+                       v2.ToImage(),
+                       v2.ToDtype(torch.float32, scale=True),
+                       v2.Normalize(mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250])])
+
+
+def _to_curve(baseline, im_size, min_points: int = 8):
     """
     Converts poly(base)lines to Bezier curves.
     """
@@ -66,7 +73,7 @@ def _to_curve(baseline, im_size, min_points: int = 8) -> torch.Tensor:
     return pa.scalar(curve, type=pa.list_(pa.float32()))
 
 
-def _to_bbox(boundary, im_size) -> torch.Tensor:
+def _to_bbox(boundary, im_size):
     """
     Converts a bounding polygon to a bbox in xyxyc_xc_yhw format.
     """
@@ -240,10 +247,7 @@ class TextLineDataModule(L.LightningDataModule):
 
         self.save_hyperparameters()
 
-        self.im_transforms = v2.Compose([v2.Resize((2560, 1920)),
-                                         v2.ToImage(),
-                                         v2.ToDtype(torch.float32, scale=True),
-                                         v2.Normalize(mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250])])
+        self.im_transforms = get_default_transforms()
 
         # tokenizer is stateless so we can just initiate it here
         tokenizer = OctetTokenizer()

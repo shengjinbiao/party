@@ -7,7 +7,7 @@ from rich.logging import RichHandler
 from rich.traceback import install
 
 from .train import train, compile
-
+from .pred import ocr
 
 def set_logger(logger=None, level=logging.ERROR):
     logger.addHandler(RichHandler(rich_tracebacks=True))
@@ -45,7 +45,7 @@ Image.MAX_IMAGE_PIXELS = 20000 ** 2
               help='Select device to use (cpu, cuda:0, cuda:1, ...)')
 @click.option('--precision',
               show_default=True,
-              default='32',
+              default='32-true',
               type=click.Choice(['transformer-engine', 'transformer-engine-float16', '16-true', '16-mixed', 'bf16-true', 'bf16-mixed', '32-true', '64-true']),
               help='Numerical precision to use for training. Default is 32-bit single-point precision.')
 @click.option('-2', '--autocast', default=False, show_default=True, flag_value=True,
@@ -67,6 +67,7 @@ def cli(ctx, verbose, seed, deterministic, device, precision, autocast):
 
 cli.add_command(compile)
 cli.add_command(train)
+cli.add_command(ocr)
 
 if __name__ == '__main__':
     cli()
