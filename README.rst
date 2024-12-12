@@ -1,7 +1,7 @@
 party
 =====
 
-party is **PA**\ ge-wise\ **R**\ ecognition of **T**\ ext-\ **y**. It is a
+party is **PA**\ ge-wise **R**\ ecognition of **T**\ ext-\ **y**. It is a
 replacement for conventional text recognizers in ATR system using the
 baseline+bounding polygon line data model where it eliminates the need for
 bounding polygons.
