@@ -18,8 +18,8 @@ Installation
         $ pip install .
 
 
-Training
---------
+Fine Tuning
+-----------
 
 Party needs to be trained on datasets precompiled from PageXML or ALTO files
 containing line-wise transcriptions and baseline information for each line. The
@@ -33,14 +33,12 @@ compilation is fairly similar:
 It is recommended to disable BiDi reordering as the pretrained model has been
 trained to recognize RTL text in logical order.
 
-To fine-tune the pretrained base model from one or more dataset files on all
-available GPUs:
+To fine-tune the pretrained base model dataset files in listed in manifest
+files on all available GPUs:
 
 ::
 
-        $ party -d cuda --precision bf16-true fine-tune --workers 32 *.arrow
-
-Training from scratch is also supported through the `party train` command.
+        $ party -d cuda --precision bf16-true train --load-from-hub mittagessen/llama_party --workers 32 -f train.lst -e val.lst
 
 Inference
 ---------
