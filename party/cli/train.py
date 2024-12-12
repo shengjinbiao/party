@@ -92,73 +92,10 @@ def compile(ctx, output, files, normalization, normalize_whitespace, reorder,
     message(f'Output file written to {output}')
 
 
-@click.command('avg_ckpts')
-@click.pass_context
-@click.option('-o', '--output', show_default=True, type=click.Path(), default='average.ckpt', help='Averaged model file path.')
-@click.option('-n', '--num-checkpoints', show_default=True, default=5, type=click.IntRange(2), help='Number of final checkpoints to average.')
-@click.argument('input', nargs=1, type=click.Path(exists=True, dir_okay=True, file_okay=False))
-def avg_ckpts(ctx, output, num_checkpoints, input):
-    """
-    Averages n-last checkpoints in input directory.
-    """
-    import glob
-    import torch
-    import collections
-    ckpts = sorted(glob.glob(f'{input}/checkpoint_*-*.ckpt'))
-    message(f'Found {len(ckpts)} checkpoints in {input}')
-    ckpts = ckpts[-num_checkpoints:]
-    if len(ckpts) < num_checkpoints:
-        raise click.BadParameter(f'Less checkpoints found than requested for averaging ({len(ckpts)} < {num_checkpoints})', param_hint='input')
-    message(f'Averaging {ckpts}')
-
-    params_dict = collections.OrderedDict()
-    params_keys = None
-    new_state = None
-    num_models = len(ckpts)
-
-    for fpath in ckpts:
-        with open(fpath, "rb") as f:
-            state = torch.load(f, map_location=(lambda s, _: torch.serialization.default_restore_location(s, 'cpu')),)
-        # Copies over the settings from the first checkpoint
-        if new_state is None:
-            new_state = state
-
-        model_params = state['state_dict']
-
-        model_params_keys = list(model_params.keys())
-        if params_keys is None:
-            params_keys = model_params_keys
-        elif params_keys != model_params_keys:
-            raise KeyError(
-                "For checkpoint {}, expected list of params: {}, "
-                "but found: {}".format(f, params_keys, model_params_keys)
-            )
-
-        for k in params_keys:
-            p = model_params[k]
-            if isinstance(p, torch.HalfTensor):
-                p = p.float()
-            if k not in params_dict:
-                params_dict[k] = p.clone()
-                # NOTE: clone() is needed in case of p is a shared parameter
-            else:
-                params_dict[k] += p
-
-    averaged_params = collections.OrderedDict()
-    for k, v in params_dict.items():
-        averaged_params[k] = v
-        if averaged_params[k].is_floating_point():
-            averaged_params[k].div_(num_models)
-        else:
-            averaged_params[k] //= num_models
-    new_state['state_dict'] = averaged_params
-    message(f'Writing averaged checkpoint to {output}')
-    torch.save(new_state, output)
-
-
 @click.command('train')
 @click.pass_context
-@click.option('-i', '--load', default=None, type=click.Path(exists=True), help='Checkpoint to load')
+@click.option('--load-from-checkpoint', default=None, type=click.Path(exists=True), help='Path to checkpoint to load')
+@click.option('--load-from-hub', default=None, help='Identifier of model on huggingface hub, .e.g `mittagessen/llama_party`')
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='batch sample size')
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='model', help='Output model file')
@@ -255,9 +192,9 @@ def avg_ckpts(ctx, output, num_checkpoints, input):
               default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'],
               help='Number of batches to accumulate gradient across.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
-def train(ctx, load, batch_size, output, freq, quit, epochs,
-          min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
-          gradient_clip_val, warmup, schedule, gamma, step_size,
+def train(ctx, load_from_checkpoint, load_from_hub, batch_size, output, freq,
+          quit, epochs, min_epochs, lag, min_delta, optimizer, lrate, momentum,
+          weight_decay, gradient_clip_val, warmup, schedule, gamma, step_size,
           sched_patience, cos_max, cos_min_lr, training_files,
           evaluation_files, workers, threads, augment, accumulate_grad_batches,
           ground_truth):
@@ -266,6 +203,9 @@ def train(ctx, load, batch_size, output, freq, quit, epochs,
     """
     if not (0 <= freq <= 1) and freq % 1.0 != 0:
         raise click.BadOptionUsage('freq', 'freq needs to be either in the interval [0,1.0] or a positive integer.')
+
+    if load_from_checkpoint and load_from_hub:
+        raise click.BadOptionsUsage('load_from_checkpoint', 'load_from_* options are mutually exclusive.')
 
     if augment:
         try:
@@ -359,13 +299,16 @@ def train(ctx, load, batch_size, output, freq, quit, epochs,
                       **val_check_interval)
 
     with trainer.init_module():
-        if load:
-            message('Loading model.')
+        if load_from_checkpoint:
+            message(f'Loading from checkpoint {load_from_checkpoint}.')
             model = RecognitionModel.load_from_checkpoint(load,
                                                           **hyper_params)
-
+        elif load_from_hub:
+            message(f'Loading from huggingface hub {load_from_hub}.')
+            model = RecognitionModel.load_from_hub(hub_id=load_from_hub,
+                                                   **hyper_params)
         else:
-            message('Initializing model.')
+            message('Initializing new model.')
             model = RecognitionModel(**hyper_params)
 
     with threadpool_limits(limits=threads):

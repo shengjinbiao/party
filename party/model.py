@@ -188,6 +188,17 @@ class RecognitionModel(L.LightningModule):
     def save_checkpoint(self, filename):
         self.trainer.save_checkpoint(filename)
 
+    @classmethod
+    def load_from_hub(cls, hub_id=None, *args, **kwargs):
+        """
+        Loads weights from a huggingface hub repository.
+        """
+        module = cls(*args, **kwargs)
+        module.model = PartyModel.from_huggingface(hub_id)
+        module.model = torch.compile(module.model)
+        module.model.train()
+        return module
+
     def configure_callbacks(self):
         callbacks = []
         if self.hparams.quit == 'early':
