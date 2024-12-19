@@ -176,8 +176,8 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
 
                 preds = []
                 for pred in predictor:
-                    preds.append(pred)
                     logger.info(f'pred: {pred}')
+                    preds.append(pred.prediction)
                     progress.update(rec_prog, advance=1)
                 with open(output_file, 'wb') as fo:
                     if doc.filetype == 'alto':
