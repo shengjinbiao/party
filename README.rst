@@ -50,6 +50,9 @@ pretrained model run:
 
         $ party ocr -i input_file.xml output_file.xml
 
+The paths to the image file(s) is automatically extracted from the XML input
+file(s).
+
 It is recommended to adjust the `--compile/--no-compile`,
 `--quantize/--no-quantize`, and `--batch-size` arguments to optimize inference
 speed for your inference environment.
