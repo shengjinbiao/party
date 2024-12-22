@@ -63,6 +63,7 @@ def _repl_page(fname, preds):
                 if el.tag.endswith('TextEquiv') or el.tag.endswith('Word'):
                     line.remove(el)
             pred_el = etree.SubElement(etree.SubElement(line, 'TextEquiv'), 'Unicode')
+            pred_el.text = pred
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
 
@@ -174,6 +175,7 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
                 for pred in model.predict_string(encoder_input=image_input,
                                                  curves=curves):
                     preds.append(pred)
+                    logger.info(f'pred: {pred}')
                     progress.update(rec_prog, advance=1)
                 with open(output_file, 'wb') as fo:
                     if doc.filetype == 'alto':
