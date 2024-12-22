@@ -24,17 +24,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from torchtune.models.llama3._model_utils import scale_hidden_dim_for_mlp
-from torchtune.models.llama3_1._position_embeddings import Llama3ScaledRoPE
-from torchtune.models.llama3_2._component_builders import llama3_mlp
-from torchtune.models.llama3_2_vision._component_builders import llama3_2_vision_projection_head
-
-from torchtune.modules import (MultiHeadAttention, RMSNorm, TanhGate,
-                               TransformerCrossAttentionLayer,
-                               TransformerDecoder, FeedForward,
-                               TransformerSelfAttentionLayer)
-from torchtune.modules import TiedLinear
-from torchtune.modules.model_fusion import FusionLayer
+from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
+                           TransformerCrossAttentionLayer, TransformerDecoder,
+                           FeedForward, TransformerSelfAttentionLayer,
+                           FusionLayer, TiedLinear, scale_hidden_dim_for_mlp,
+                           Llama3ScaledRoPE, llama3_mlp,
+                           llama3_2_vision_projection_head)
 
 from party.prompt import PromptEncoder
 from party.tokenizer import OctetTokenizer
@@ -77,11 +72,11 @@ def bytellama_vision_decoder(vocab_size: int = 259,
             for GQA `num_kv_heads` < `num_heads`, and for MQA set `num_kv_heads` == 1.
         embed_dim (int): embedding dimension for self-attention.
         max_seq_len (int): maximum sequence length the model will be run with, as used
-            by :func:`~torchtune.modules.KVCache`.
+            by :func:`~party.modules.KVCache`.
         intermediate_dim (Optional[int]): intermediate dimension for MLP. If not specified,
-            this is computed using :func:`~torchtune.modules.scale_hidden_dim_for_mlp`.
+            this is computed using :func:`~party.modules.scale_hidden_dim_for_mlp`.
         encoder_max_seq_len (int): maximum sequence length the encoder will be run with, as used
-            by :func:`~torchtune.modules.KVCache`.
+            by :func:`~party.modules.KVCache`.
         fusion_interval (int): interval number of layers between fusion layers.
         pretrained (str): huggingface hub identifier of pretrained bytellama
                           weights. All hyperparameters will except
@@ -312,9 +307,9 @@ class PartyModel(nn.Module):
         """
         Sets up key-value attention caches for inference for ``self.decoder``.
         For each layer in ``self.decoder.layers``:
-        - :class:`torchtune.modules.TransformerSelfAttentionLayer` will use ``decoder_max_seq_len``.
-        - :class:`torchtune.modules.TransformerCrossAttentionLayer` will use ``encoder_max_seq_len``.
-        - :class:`torchtune.modules.fusion.FusionLayer` will use both ``decoder_max_seq_len`` and ``encoder_max_seq_len``.
+        - :class:`party.modules.TransformerSelfAttentionLayer` will use ``decoder_max_seq_len``.
+        - :class:`party.modules.TransformerCrossAttentionLayer` will use ``encoder_max_seq_len``.
+        - :class:`party.modules.fusion.FusionLayer` will use both ``decoder_max_seq_len`` and ``encoder_max_seq_len``.
 
         Args:
             batch_size (int): batch size for the caches.
