@@ -151,15 +151,14 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
             except Exception:
                 click.secho('\u2717', fg='red')
 
-        # load image transforms
-        im_transforms = get_default_transforms()
-
         # prepare model for generation
         model.prepare_for_generation(batch_size=batch_size, device=fabric.device)
         model = model.eval()
 
-        fabric.to_device(model)
         m_dtype = next(model.parameters()).dtype
+
+        # load image transforms
+        im_transforms = get_default_transforms(dtype=m_dtype)
 
         with KrakenProgressBar() as progress:
             file_prog = progress.add_task('Files', total=len(input))
@@ -171,8 +170,8 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
                 im = Image.open(doc.imagename)
                 bounds = doc.to_container()
                 rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
-                image_input = fabric.to_device(im_transforms(im)).to(m_dtype).unsqueeze(0)
-                curves = fabric.to_device(torch.tensor([_to_curve(line.baseline, im.size).as_py() for line in bounds.lines], dtype=m_dtype))
+                image_input = im_transforms(im).to(m_dtype).unsqueeze(0)
+                curves = torch.tensor([_to_curve(line.baseline, im.size).as_py() for line in bounds.lines], dtype=m_dtype)
                 curves = curves.view(-1, 4, 2)
                 preds = []
                 for pred in model.predict_string(encoder_input=image_input,
