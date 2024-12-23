@@ -97,6 +97,8 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
 
+    import os
+    import glob
     import torch
     import pathlib
     from PIL import Image
@@ -128,10 +130,10 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
                     devices=device,
                     precision=ctx.meta['precision'])
 
-    with fabric.init_module():
+    with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']), fabric.init_tensor(), fabric.init_module():
+
         model = PartyModel.from_huggingface(pretrained=model)
 
-    with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']):
         if compile:
             click.echo('Compiling model ', nl=False)
             try:
@@ -156,6 +158,7 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
         model.prepare_for_generation(batch_size=batch_size, device=fabric.device)
         model = model.eval()
 
+        fabric.to_device(model)
         m_dtype = next(model.parameters()).dtype
 
         with KrakenProgressBar() as progress:
@@ -185,7 +188,7 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
                     else:
                         raise ValueError(f'{input_file} has unknown XML format {doc.filetype} (not in [alto|page]).')
                     fo.write(out_xml)
-            progress.update(file_prog, advance=1)
+                progress.update(file_prog, advance=1)
 
 if __name__ == '__main__':
     cli()
