@@ -153,7 +153,7 @@ def ocr(ctx, input, batch_input, suffix, model, compile, quantize, batch_size):
         im_transforms = get_default_transforms()
 
         # prepare model for generation
-        model.prepare_for_generation(batch_size=batch_size)
+        model.prepare_for_generation(batch_size=batch_size, device=fabric.device)
         model = model.eval()
 
         m_dtype = next(model.parameters()).dtype
