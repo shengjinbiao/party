@@ -28,10 +28,9 @@ from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
                            TransformerCrossAttentionLayer, TransformerDecoder,
                            FeedForward, TransformerSelfAttentionLayer,
                            FusionLayer, TiedLinear, scale_hidden_dim_for_mlp,
-                           Llama3ScaledRoPE, llama3_mlp,
+                           Llama3ScaledRoPE, llama3_mlp, PromptEncoder,
                            llama3_2_vision_projection_head)
 
-from party.prompt import PromptEncoder
 from party.tokenizer import OctetTokenizer
 
 logger = logging.getLogger(__name__)
