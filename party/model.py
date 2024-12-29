@@ -198,7 +198,7 @@ class RecognitionModel(L.LightningModule):
     def configure_optimizers(self):
         return _configure_optimizer_and_lr_scheduler(self.hparams,
                                                      self.model.parameters(),
-                                                     loss_tracking_mode='max')
+                                                     loss_tracking_mode='min')
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
         # update params
@@ -224,7 +224,7 @@ class RecognitionModel(L.LightningModule):
                     scheduler.step(metric)
 
 
-def _configure_optimizer_and_lr_scheduler(hparams, params, loss_tracking_mode='max'):
+def _configure_optimizer_and_lr_scheduler(hparams, params, loss_tracking_mode='min'):
     optimizer = hparams.get("optimizer")
     lr = hparams.get("lr")
     momentum = hparams.get("momentum")
