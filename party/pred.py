@@ -93,7 +93,7 @@ class batched_pred(object):
 
         line_prompt_fn = None
         if m_prompt_mode == 'curves' and s_prompt_mode == 'bbox':
-            raise ValueError(f'Model expects curves and segmentation is bbox-type. Aborting.')
+            raise ValueError('Model expects curves and segmentation is bbox-type. Aborting.')
         if prompt_mode is None:
             if m_prompt_mode == 'boxes' and s_prompt_mode == 'baseline':
                 logger.info('Model expect boxes and segmentation is baseline-type. Casting bounding polygons to bounding boxes.')

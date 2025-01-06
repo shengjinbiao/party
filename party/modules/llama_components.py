@@ -6,15 +6,12 @@
 
 import math
 import torch
-from typing import List, Optional
 
 from torch import nn
-from enum import Enum
-from functools import partial
 from typing import List, Optional
 
 from .feed_forward import FeedForward
-from .norms import Fp32LayerNorm
+
 
 def llama3_mlp(dim: int, hidden_dim: int) -> FeedForward:
     """
@@ -90,77 +87,6 @@ class Llama3VisionProjectionHead(nn.Module):
         x = self.output(x).reshape(bsz, imgs * tiles * embeds, -1)
 
         return x
-
-
-def llama3_2_vision_projection_head(
-    *,
-    num_layers: int,
-    num_heads: int,
-    decoder_embed_dim: int,
-    clip_embed_dim: int,
-    num_hidden_inputs: int,
-) -> Llama3VisionProjectionHead:
-    """
-    Build the Llama 3.2 Vision Projection Head that maps the output of the CLIP encoder
-    to the decoder cross attention input.
-
-    Args:
-        num_layers (int): number of layers in the projection head.
-        num_heads (int): number of heads in the projection head.
-        decoder_embed_dim (int): embedding dimension for the decoder.
-        clip_embed_dim (int): embedding dimension for the CLIP encoder.
-        num_hidden_inputs (int): number of hidden inputs to the projection head.
-
-    Returns:
-        Llama3VisionProjectionHead: Instantiation of Llama 3.2 vision projection head.
-    """
-    mlp_ratio = 4
-    hidden_dim = int(mlp_ratio * clip_embed_dim)
-    head_dim = clip_embed_dim // num_heads
-    num_kv_heads = num_heads
-
-    layers = []
-    for _ in range(num_layers):
-        self_attn = MultiHeadAttention(
-            embed_dim=clip_embed_dim,
-            num_heads=num_heads,
-            num_kv_heads=num_heads,
-            head_dim=head_dim,
-            q_proj=nn.Linear(clip_embed_dim, num_heads * head_dim, bias=False),
-            k_proj=nn.Linear(clip_embed_dim, num_kv_heads * head_dim, bias=False),
-            v_proj=nn.Linear(clip_embed_dim, num_kv_heads * head_dim, bias=False),
-            output_proj=nn.Linear(clip_embed_dim, clip_embed_dim, bias=False),
-            pos_embeddings=None,
-            attn_dropout=0.0,
-            is_causal=False,
-        )
-
-        mlp = clip_mlp(
-            in_dim=clip_embed_dim,
-            hidden_dim=hidden_dim,
-            out_dim=clip_embed_dim,
-            activation=nn.GELU(),
-        )
-
-        layer = TransformerSelfAttentionLayer(
-            attn=self_attn,
-            mlp=mlp,
-            sa_norm=Fp32LayerNorm(clip_embed_dim, eps=1e-5),
-            mlp_norm=Fp32LayerNorm(clip_embed_dim, eps=1e-5),
-            sa_scale=TanhGate(),
-            mlp_scale=TanhGate(),
-        )
-        layers.append(layer)
-
-    # we concatenate clip embeddings and hidden layers output
-    # and project it to embed_dim_out, which will be used for the
-    # cross encoding
-    proj_in = clip_embed_dim * (num_hidden_inputs + 1)
-    return Llama3VisionProjectionHead(
-        layers=layers,
-        output=nn.Linear(proj_in, decoder_embed_dim),
-        num_hidden_inputs=num_hidden_inputs,
-    )
 
 
 def scale_hidden_dim_for_mlp(dim: int, multiple_of: int = 256) -> int:

@@ -26,7 +26,6 @@ from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.utilities.memory import (garbage_collection_cuda,
                                                 is_oom_error)
 from torch.optim import lr_scheduler
-#from torchmetrics.text import CharErrorRate, WordErrorRate
 from torchmetrics.aggregation import MeanMetric
 
 from typing import Literal, Tuple
@@ -94,13 +93,11 @@ class RecognitionModel(L.LightningModule):
 
         self.criterion = nn.CrossEntropyLoss()
 
-        #self.val_cer = CharErrorRate()
-        #self.val_wer = WordErrorRate()
         self.val_mean = MeanMetric()
 
     def forward(self, x, curves):
-        return self.model(encoder_input=batch['image'],
-                          encoder_curves=batch['curves'])
+        return self.model(encoder_input=x,
+                          encoder_curves=curves)
 
     def _step(self, batch):
         try:
@@ -147,23 +144,10 @@ class RecognitionModel(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self):
-        #accuracy = 1.0 - self.val_cer.compute()
-        #word_accuracy = 1.0 - self.val_wer.compute()
-
-        #if accuracy > self.best_metric:
-        #    logger.debug(f'Updating best metric from {self.best_metric} ({self.best_epoch}) to {accuracy} ({self.current_epoch})')
-        #    self.best_epoch = self.current_epoch
-        #    self.best_metric = accuracy
-        #logger.info(f'validation run: total chars {self.val_cer.total} errors {self.val_cer.errors} accuracy {accuracy}')
-        #self.log('val_accuracy', accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        #self.log('val_word_accuracy', word_accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         if not self.trainer.sanity_checking:
             self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
         self.val_mean.reset()
-
-        #self.val_cer.reset()
-        #self.val_wer.reset()
 
     def save_checkpoint(self, filename):
         self.trainer.save_checkpoint(filename)

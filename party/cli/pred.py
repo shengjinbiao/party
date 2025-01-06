@@ -25,20 +25,17 @@ import logging
 from lxml import etree
 from pathlib import Path
 
-from .util import _expand_gt, _validate_manifests, message, to_ptl_device
+from .util import to_ptl_device
 
 logging.captureWarnings(True)
 logger = logging.getLogger('party')
-
 
 
 def _repl_alto(fname, preds):
     with open(fname, 'rb') as fp:
         doc = etree.parse(fp)
         lines = doc.findall('.//{*}TextLine')
-        char_idx = 0
         for line, pred in zip(lines, preds):
-            idx = 0
             # strip out previous recognition results
             for el in line:
                 if el.tag.endswith('Shape'):
@@ -65,7 +62,6 @@ def _repl_page(fname, preds):
             pred_el = etree.SubElement(etree.SubElement(line, 'TextEquiv'), 'Unicode')
             pred_el.text = pred
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
-
 
 
 @click.command('ocr')
@@ -188,6 +184,3 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
                         raise ValueError(f'{input_file} has unknown XML format {doc.filetype} (not in [alto|page]).')
                     fo.write(out_xml)
                 progress.update(file_prog, advance=1)
-
-if __name__ == '__main__':
-    cli()

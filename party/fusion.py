@@ -14,22 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Llama vision fusion model"""
-
-import copy
 import logging
-from typing import Generator, Optional, Tuple, Union, List
+from typing import Generator, Optional, Union, List
 
 import json
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
                            TransformerCrossAttentionLayer, TransformerDecoder,
                            FeedForward, TransformerSelfAttentionLayer,
                            FusionLayer, TiedLinear, scale_hidden_dim_for_mlp,
-                           Llama3ScaledRoPE, llama3_mlp, PromptEncoder,
-                           llama3_2_vision_projection_head)
+                           Llama3ScaledRoPE, llama3_mlp, PromptEncoder)
 
 from party.tokenizer import OctetTokenizer
 
@@ -187,6 +183,7 @@ def bytellama_vision_decoder(vocab_size: int = 259,
 
     return decoder
 
+
 def party_adapter(num_layers: int,
                   num_heads: int,
                   encoder_embed_dim: int,
@@ -257,7 +254,6 @@ class PartyModel(nn.Module):
         self.line_embedding = PromptEncoder(decoder_embed_dim)
 
         self.ready_for_generation = False
-
 
     @classmethod
     def from_huggingface(cls, pretrained: str = 'mittagessen/llama_party') -> 'PartyModel':
@@ -430,7 +426,7 @@ class PartyModel(nn.Module):
                                batch_size: int = 8,
                                max_encoder_seq_len: int = 19200,
                                max_generated_tokens: int = 384,
-                               device = 'cpu'):
+                               device: torch.device = torch.device('cpu')):
 
         if self.ready_for_generation:
             raise ValueError('Model has already been prepared for generation!')
@@ -438,7 +434,7 @@ class PartyModel(nn.Module):
         self._batch_size = batch_size
         self._max_generated_tokens = max_generated_tokens
 
-         # generate a regular causal mask
+        # generate a regular causal mask
         self._masks = torch.tril(torch.ones(max_generated_tokens,
                                             max_generated_tokens,
                                             dtype=torch.bool,
@@ -454,7 +450,6 @@ class PartyModel(nn.Module):
         # create batch size number of BOS tokens
         self._prompt = torch.full((batch_size, 1), bos_id, device=device, dtype=torch.long)
         self.ready_for_generation = True
-
 
     @torch.inference_mode()
     def predict_tokens(self,
@@ -484,7 +479,7 @@ class PartyModel(nn.Module):
         if curves is None and boxes is None:
             raise ValueError('One of `curves` or `boxes` needs to be set.')
 
-        logger.info(f'Computing encoder embeddings')
+        logger.info('Computing encoder embeddings')
 
         encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
 
@@ -529,10 +524,6 @@ class PartyModel(nn.Module):
 
             # mask used for setting all values from EOS token to pad_id in output sequences.
             eos_token_mask = torch.ones(bsz, 0, dtype=torch.int32, device=curves.device)
-
-            # set padding sequences to empty
-            if pad_size:
-                eos_token_reached[-pad_size:] = True
 
             if eos_token_reached.all():
                 break

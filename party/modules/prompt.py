@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Multimodal prompt encoder"""
-
-import copy
-import logging
-from typing import Optional, Tuple, Union
-
 import torch
+import logging
+
 from torch import nn
+from typing import Optional
+
 
 logger = logging.getLogger(__name__)
 

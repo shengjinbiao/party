@@ -15,12 +15,9 @@
 
 """
 """
-import torch
 import logging
-from collections import Counter
-from typing import Dict, List, Sequence, Set, Union, Tuple
+from typing import List
 
-import numpy as np
 from torch import IntTensor
 
 __all__ = ['OctetTokenizer']
@@ -68,9 +65,9 @@ class OctetTokenizer(object):
         Encode text into token IDs.
 
         Args:
-            text (str): The input text to be encoded, unbatched.
-            add_bos (bool): Whether to prepend BOS to the input, defaults to True.
-            add_eos (bool): Whether to append EOS to the input, defaults to True.
+            text: The input text to be encoded, unbatched.
+            add_bos: Whether to prepend BOS to the input, defaults to True.
+            add_eos: Whether to append EOS to the input, defaults to True.
 
         Returns:
             List[int]: The encoded token IDs.
@@ -88,7 +85,7 @@ class OctetTokenizer(object):
         """Decode token IDs to strings.
 
         Args:
-            ids (List[int]): The input token IDs to be decoded.
+            ids: The input token IDs to be decoded.
 
         Returns:
             str: The decoded text.
