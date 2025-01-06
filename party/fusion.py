@@ -501,11 +501,7 @@ class PartyModel(nn.Module):
                                   device=curves.device)
 
         for batch_idx, batch in enumerate(batches):
-            # pad batch to full size if last batch is incomplete
-            pad_size = 0
-            if batch.size(0) != self._batch_size:
-                pad_size = self._batch_size - batch.size(0)
-                batch = F.pad(batch, (0, 0, 0, 0, 0, pad_size))
+            bsz = batch.size(0)
 
             self.reset_caches()
 
@@ -513,13 +509,13 @@ class PartyModel(nn.Module):
 
             # add line embeddings to encoder hidden states
             line_embeds = self.line_embedding(batch).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
-            exp_encoder_hidden_states = encoder_hidden_states + line_embeds
+            exp_encoder_hidden_states = encoder_hidden_states[:bsz, ...] + line_embeds
 
             # prefill step
             curr_masks = self._masks[:, :1]
             logits = self.forward(tokens=self._prompt,
                                   encoder_hidden_states=exp_encoder_hidden_states,
-                                  encoder_mask=encoder_mask[:self._batch_size, ...],
+                                  encoder_mask=encoder_mask[:bsz, ...],
                                   mask=curr_masks,
                                   input_pos=self._input_pos[:, :1].squeeze())
             tokens = torch.argmax(logits, dim=-1)
@@ -528,11 +524,11 @@ class PartyModel(nn.Module):
             curr_pos = 1
 
             # keeps track of EOS tokens emitted by each sequence in a batch
-            eos_token_reached = torch.zeros(self._batch_size, dtype=torch.bool, device=curves.device)
+            eos_token_reached = torch.zeros(bsz, dtype=torch.bool, device=curves.device)
             eos_token_reached |= tokens[:, -1] == eos_token
 
             # mask used for setting all values from EOS token to pad_id in output sequences.
-            eos_token_mask = torch.ones(self._batch_size, 0, dtype=torch.int32, device=curves.device)
+            eos_token_mask = torch.ones(bsz, 0, dtype=torch.int32, device=curves.device)
 
             # set padding sequences to empty
             if pad_size:
@@ -543,7 +539,7 @@ class PartyModel(nn.Module):
 
             for _ in range(self._max_generated_tokens - 1):
                 # update eos_token_mask if an EOS token was emitted in a previous step
-                eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(self._batch_size, 1)], dim=-1)
+                eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(bsz, 1)], dim=-1)
 
                 curr_input_pos = self._input_pos[:, curr_pos]
                 curr_masks = self._masks[:, curr_pos, None, :]
@@ -561,13 +557,13 @@ class PartyModel(nn.Module):
                 if eos_token_reached.all():
                     break
 
-            eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(self._batch_size, 1)], dim=-1)
+            eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(bsz, 1)], dim=-1)
 
             # mask out generated tokens beyond EOS token
             generated_tokens = torch.stack(generated_tokens).T
             generated_tokens *= eos_token_mask
 
-            yield generated_tokens[:self._batch_size-pad_size, :-1]
+            yield generated_tokens[..., :-1]
 
     @torch.inference_mode
     def predict_string(self,
