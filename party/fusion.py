@@ -295,6 +295,48 @@ class PartyModel(nn.Module):
 
         return model
 
+    @classmethod
+    def from_safetensors(cls, filename: Union[str, 'PathLike']) -> 'PartyModel':
+        """
+        Loads model weights from a safetensors-based kraken serialization.
+        """
+        import timm
+        from safetensors import safe_open
+
+        with safe_open(filename, framework='pt') as f:
+            metadata = f.metadata()
+            if metadata['model_type'] != 'kraken_llama_party':
+                raise ValueError(f'{filename} is not a llama party model. Got type {metadata["model_type"]}, expected: kraken_llama_party.')
+            config = json.loads(metadata['config'])
+            prompt_mode = config.pop('prompt_mode')
+            encoder_config = {k[8:]: v for k, v in config.items() if k.startswith('encoder_')}
+            decoder_config = {k[8:]: v for k, v in config.items() if k.startswith('decoder_')}
+
+            state_dict = {k: f.get_tensor(k) for k in f.keys()}
+
+        # enable fused attn in encoder
+        timm.layers.use_fused_attn(experimental=True)
+
+        encoder_model = timm.create_model(encoder_config['name'],
+                                          pretrained=False,
+                                          num_classes=0,
+                                          img_size=encoder_config['input_size'],
+                                          global_pool='')
+
+        l_idx = encoder_model.prune_intermediate_layers(indices=(-2,), prune_head=True, prune_norm=True)[0]
+        decoder_model = bytellama_vision_decoder(**decoder_config)
+
+        model = cls(encoder=encoder_model,
+                    decoder=decoder_model,
+                    encoder_embed_dim=encoder_model.feature_info[l_idx]['num_chs'],
+                    decoder_embed_dim=decoder_model.tok_embeddings.embedding_dim)
+
+        model.load_state_dict(state_dict)
+
+        model.line_prompt_mode = prompt_mode
+
+        return model
+
     def setup_caches(self,
                      batch_size: int,
                      dtype: torch.dtype,
