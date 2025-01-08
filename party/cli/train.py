@@ -34,6 +34,32 @@ logger = logging.getLogger('party')
 logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 
 
+@click.command('convert')
+@click.pass_context
+@click.option('-o', '--output', show_default=True, type=click.Path(), default='model.safetensors', help='Output model file')
+@click.option('-i', '--model-card', show_default=True, default=None, type=click.File(mode='r', lazy=True),
+              help='Markdown file containing the model card.')
+@click.argument('checkpoint_path', nargs=1, type=click.Path(exists=True, dir_okay=False))
+def convert(ctx, output, model_card, checkpoint_path):
+    """
+    Converts a checkpoint into the new safetensors-based kraken serialization
+    format.
+    """
+    from .util import message
+
+    from party.util import checkpoint_to_kraken
+
+    if model_card:
+        model_card = model_card.read()
+
+    checkpoint_to_kraken(checkpoint_path,
+                         filename=output,
+                         model_card=model_card)
+
+    message(f'Output file written to {output}')
+
+
+
 @click.command('compile')
 @click.pass_context
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='dataset.arrow', help='Output dataset file')

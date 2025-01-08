@@ -55,9 +55,12 @@ def checkpoint_to_kraken(checkpoint_path: Union[str, 'PathLike'],
                 'config': json.dumps(config)}
     if model_card:
         metadata['model_card'] = model_card
+
+    states = {k.removeprefix('model._orig_mod.'): v for k, v in state_dict['state_dict'].items()}
     # we can just save the state dict as our constructor sets up the tensor
     # sharing.
-    safe_file(state_dict['state_dict'],
+    save_file(states, filename, metadata=metadata)
+
 
 def update_model_card(model_path: Union[str, 'PathLike'],
                       model_card: Optional[str] = None):

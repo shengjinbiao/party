@@ -6,7 +6,7 @@ from PIL import Image
 from rich.logging import RichHandler
 from rich.traceback import install
 
-from .train import train, compile
+from .train import train, compile, convert
 from .pred import ocr
 
 
@@ -68,6 +68,7 @@ def cli(ctx, verbose, seed, deterministic, device, precision, threads):
 
 
 cli.add_command(compile)
+cli.add_command(convert)
 cli.add_command(train)
 cli.add_command(ocr)
 
