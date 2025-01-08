@@ -18,6 +18,7 @@ def train_model(trial: 'optuna.trial.Trial',
                 num_workers,
                 training_data,
                 evaluation_data,
+                prompt_mode,
                 epochs) -> float:
 
     from party.dataset import TextLineDataModule
