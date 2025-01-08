@@ -119,7 +119,7 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
     path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, model))
     try:
         with KrakenDownloadProgressBar() as progress:
-            download_task = progress.add_task('Downloading {model}', total=0, visible=True)
+            download_task = progress.add_task(f'Downloading {model}', total=0, visible=True)
             get_model(model,
                       path=path,
                       callback=lambda total, advance: progress.update(download_task, total=total, advance=advance),
