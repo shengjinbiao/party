@@ -42,6 +42,7 @@ def train_model(trial: 'optuna.trial.Trial',
                                      evaluation_data=evaluation_data,
                                      batch_size=hyper_params['batch_size'],
                                      augmentation=True,
+                                     prompt_mode=prompt_mode,
                                      num_workers=num_workers)
 
     model = RecognitionModel.load_from_checkpoint(checkpoint, **hyper_params)
@@ -83,8 +84,17 @@ def train_model(trial: 'optuna.trial.Trial',
               callback=_validate_manifests, type=click.File(mode='r', lazy=True),
               help='File(s) with paths to evaluation data. Overrides the `-p` parameter')
 @click.option('--load-from-checkpoint', default=None, type=click.Path(exists=True), help='Path to checkpoint to load')
+@click.option('--prompt-mode',
+              show_default=True,
+              type=click.Choice(['boxes',
+                                 'curves',
+                                 'both']),
+              default='both',
+              help='Sets line prompt sampling mode: `boxes` for boxes only, '
+              '`curves` for curves only, and `both` for randomly switching '
+              'between boxes and curves.')
 def cli(ctx, device, seed, database, name, epochs, samples, workers, pruning,
-        load_from_checkpoint, training_files, evaluation_files):
+        load_from_checkpoint, training_files, evaluation_files, prompt_mode):
 
     try:
         accelerator, device = to_ptl_device(device)
@@ -119,6 +129,7 @@ def cli(ctx, device, seed, database, name, epochs, samples, workers, pruning,
                         training_data=ground_truth,
                         evaluation_data=evaluation_files,
                         num_workers=workers,
+                        prompt_mode=prompt_mode,
                         epochs=epochs)
 
     pruner = optuna.pruners.MedianPruner(n_startup_trials=10,
