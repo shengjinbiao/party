@@ -176,19 +176,14 @@ class MultiHeadAttention(nn.Module):
             max_seq_len (int): maximum sequence length model will be run with.
         """
         # Don't overwrite user defined kv_cache from init
-        if self.kv_cache is not None:
-            logger.warning(
-                "Key value caches are already setup. You cannot call ``setup_caches()`` twice. Skipping."
-            )
-        else:
-            self.kv_cache = KVCache(
-                batch_size=batch_size,
-                max_seq_len=max_seq_len,
-                num_kv_heads=self.num_kv_heads,
-                head_dim=self.head_dim,
-                dtype=dtype,
-            )
-            self.cache_enabled = True
+        self.kv_cache = KVCache(
+            batch_size=batch_size,
+            max_seq_len=max_seq_len,
+            num_kv_heads=self.num_kv_heads,
+            head_dim=self.head_dim,
+            dtype=dtype,
+        )
+        self.cache_enabled = True
 
     def reset_cache(self):
         """Reset the key value caches."""

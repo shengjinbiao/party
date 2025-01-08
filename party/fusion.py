@@ -475,6 +475,7 @@ class PartyModel(nn.Module):
 
         self._batch_size = batch_size
         self._max_generated_tokens = max_generated_tokens
+        self._max_encoder_seq_len = max_encoder_seq_len
 
         # generate a regular causal mask
         self._masks = torch.tril(torch.ones(max_generated_tokens,
@@ -543,6 +544,12 @@ class PartyModel(nn.Module):
             self.reset_caches()
 
             logger.info(f'Processing batch {batch_idx} of {len(batches)}')
+            if bsz != self._batch_size:
+                logger.info(f'Resizing caches for last batch ({self._batch_size} -> {bsz})')
+                self.setup_caches(batch_size=bsz,
+                                  encoder_max_seq_len=self._max_encoder_seq_len,
+                                  decoder_max_seq_len=self._max_generated_tokens,
+                                  dtype=next(self.encoder.parameters()).dtype)
 
             # add line embeddings to encoder hidden states
             line_embeds = self.line_embedding(batch).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
@@ -550,7 +557,7 @@ class PartyModel(nn.Module):
 
             # prefill step
             curr_masks = self._masks[:, :1]
-            logits = self.forward(tokens=self._prompt,
+            logits = self.forward(tokens=self._prompt[:bsz, ...],
                                   encoder_hidden_states=exp_encoder_hidden_states,
                                   encoder_mask=encoder_mask[:bsz, ...],
                                   mask=curr_masks,
