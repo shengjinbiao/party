@@ -153,12 +153,12 @@ class RecognitionModel(L.LightningModule):
         self.trainer.save_checkpoint(filename)
 
     @classmethod
-    def load_from_hub(cls, hub_id=None, *args, **kwargs):
+    def load_from_repo(cls, id=None, *args, **kwargs):
         """
         Loads weights from a huggingface hub repository.
         """
         module = cls(*args, **kwargs, pretrained=False)
-        module.model = PartyModel.from_huggingface(hub_id)
+        module.model = PartyModel.from_safetensors(id)
         module.model = torch.compile(module.model)
         module.model.train()
         return module

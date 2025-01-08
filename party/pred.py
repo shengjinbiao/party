@@ -111,8 +111,10 @@ class batched_pred(object):
             line_prompt_fn = _box_prompt_fn if prompt_mode == 'boxes' else _curve_prompt_fn
             self.prompt_mode = prompt_mode
 
+        m_dtype = next(model.parameters()).dtype
+
         # load image transforms
-        im_transforms = get_default_transforms()
+        im_transforms = get_default_transforms(dtype=m_dtype)
 
         # prepare model for generation
         model.prepare_for_generation(batch_size=batch_size)

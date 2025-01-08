@@ -111,7 +111,7 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 @click.command('train')
 @click.pass_context
 @click.option('--load-from-checkpoint', default=None, type=click.Path(exists=True), help='Path to checkpoint to load')
-@click.option('--load-from-hub', default=None, help='Identifier of model on huggingface hub, .e.g `mittagessen/llama_party`')
+@click.option('--load-from-repo', default=None, help='Identifier of model on huggingface hub, .e.g `10.5281/zenodo.14616981`')
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='batch sample size')
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='model', help='Output model file')
@@ -217,9 +217,9 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'],
               help='Number of batches to accumulate gradient across.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
-def train(ctx, load_from_checkpoint, load_from_hub, batch_size, output, freq,
-          quit, epochs, min_epochs, lag, min_delta, optimizer, lrate, momentum,
-          weight_decay, gradient_clip_val, warmup, schedule, gamma, step_size,
+def train(ctx, load_from_checkpoint, batch_size, output, freq, quit, epochs,
+          min_epochs, lag, min_delta, optimizer, lrate, momentum, weight_decay,
+          gradient_clip_val, warmup, schedule, gamma, step_size,
           sched_patience, cos_max, cos_min_lr, training_files,
           evaluation_files, workers, threads, augment, prompt_mode,
           accumulate_grad_batches, ground_truth):
@@ -229,7 +229,7 @@ def train(ctx, load_from_checkpoint, load_from_hub, batch_size, output, freq,
     if not (0 <= freq <= 1) and freq % 1.0 != 0:
         raise click.BadOptionUsage('freq', 'freq needs to be either in the interval [0,1.0] or a positive integer.')
 
-    if load_from_checkpoint and load_from_hub:
+    if load_from_checkpoint and load_from_repo:
         raise click.BadOptionsUsage('load_from_checkpoint', 'load_from_* options are mutually exclusive.')
 
     if augment:
@@ -331,8 +331,8 @@ def train(ctx, load_from_checkpoint, load_from_hub, batch_size, output, freq,
                                                           **hyper_params)
         elif load_from_hub:
             message(f'Loading from huggingface hub {load_from_hub}.')
-            model = RecognitionModel.load_from_hub(hub_id=load_from_hub,
-                                                   **hyper_params)
+            model = RecognitionModel.load_from_repo(hub_id=load_from_repo,
+                                                    **hyper_params)
         else:
             message('Initializing new model.')
             model = RecognitionModel(**hyper_params)

@@ -76,9 +76,9 @@ def _repl_page(fname, preds):
 @click.option('-o', '--suffix', default='', show_default=True,
               help='Suffix for output files from batch and PDF inputs.')
 @click.option('-m', '--model',
-              default='mittagessen/llama_party',
+              default='10.5281/zenodo.14616981',
               show_default=True,
-              help="Huggingface hub identifier of the party model")
+              help="HTRMoPo identifier of the party model")
 @click.option('--curves/--boxes', help='Encode line prompts as bounding boxes or curves', default=None, show_default=True)
 @click.option('--compile/--no-compile', help='Switch to enable/disable torch.compile() on model', default=True, show_default=True)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
@@ -90,16 +90,21 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
     # try importing kraken as we need it for inference
     try:
         from kraken.lib.xml import XMLPage
-        from kraken.lib.progress import KrakenProgressBar
+        from kraken.lib.progress import KrakenProgressBar, KrakenDownloadProgressBar
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
 
     import os
     import glob
+    import uuid
     import torch
+
     from PIL import Image
     from pathlib import Path
     from lightning.fabric import Fabric
+
+    from platformdirs import user_data_dir
+    from htrmopo import get_model
 
     from threadpoolctl import threadpool_limits
 
@@ -110,6 +115,17 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
         accelerator, device = to_ptl_device(ctx.meta['device'])
     except Exception as e:
         raise click.BadOptionUsage('device', str(e))
+
+    path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, model))
+    try:
+        with KrakenDownloadProgressBar() as progress:
+            download_task = progress.add_task('Downloading {model}', total=0, visible=True)
+            get_model(model,
+                      path=path,
+                      callback=lambda total, advance: progress.update(download_task, total=total, advance=advance),
+                      abort_if_exists=True)
+    except:
+        print(f'Model {model} already downloaded.')
 
     if curves is True:
         curves = 'curves'
@@ -134,12 +150,12 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
 
     with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']), fabric.init_tensor(), fabric.init_module():
 
-        model = PartyModel.from_huggingface(pretrained=model)
+        model = PartyModel.from_safetensors(path / 'model.safetensors')
 
         if compile:
             click.echo('Compiling model ', nl=False)
             try:
-                model = torch.compile(model)
+                model = torch.compile(model, mode='max-autotune')
                 click.secho('\u2713', fg='green')
             except Exception:
                 click.secho('\u2717', fg='red')
