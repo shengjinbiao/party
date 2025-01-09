@@ -39,7 +39,7 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='Batch sample size')
 @click.option('-m', '--load-from-repo',
-              default=None
+              default=None,
               show_default=True,
               help="HTRMoPo identifier of the party model to evaluate")
 @click.option('-i', '--load-from-file',
