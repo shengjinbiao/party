@@ -21,6 +21,8 @@ API for inference
 import torch
 import logging
 
+from dataclasses import asdict
+
 from kraken.containers import BBoxOCRRecord, BaselineOCRRecord
 
 from typing import TYPE_CHECKING, Union, Tuple, Optional, Literal, Generator
@@ -53,6 +55,19 @@ def _curve_prompt_fn(line: 'BaselineLine', im_size: Tuple[int, int]) -> torch.Te
     Converts a BaselineLine to a quadratic Bézier curve.
     """
     return _to_curve(line.baseline, im_size).as_py()
+
+
+def _baseline_to_bbox(line: 'BaselineLine') -> 'BBoxLine':
+    """
+    Converts a BaselineLine to a BBoxLine.
+    """
+    d = asdict(line)
+    d.pop('baseline')
+    flat_box = [point for pol in d.pop('boundary') for point in pol]
+    xmin, xmax = min(flat_box[::2]), max(flat_box[::2])
+    ymin, ymax = min(flat_box[1::2]), max(flat_box[1::2])
+    d['bbox'] = (xmin, ymin, xmax, ymax)
+    return BBoxLine(**d)
 
 
 class batched_pred(object):
@@ -144,7 +159,7 @@ class batched_pred(object):
             return BBoxOCRRecord(prediction=pred_str,
                                  cuts=tuple(),
                                  confidences=tuple(),
-                                 line=line,
+                                 line=_baseline_to_bbox(line),
                                  display_order=False)
 
     def __iter__(self):
