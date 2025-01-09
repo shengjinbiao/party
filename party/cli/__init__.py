@@ -6,8 +6,9 @@ from PIL import Image
 from rich.logging import RichHandler
 from rich.traceback import install
 
-from .train import train, compile, convert
 from .pred import ocr
+from .test import test
+from .train import train, compile, convert
 
 
 def set_logger(logger=None, level=logging.ERROR):
@@ -70,6 +71,7 @@ def cli(ctx, verbose, seed, deterministic, device, precision, threads):
 cli.add_command(compile)
 cli.add_command(convert)
 cli.add_command(train)
+cli.add_command(test)
 cli.add_command(ocr)
 
 if __name__ == '__main__':
