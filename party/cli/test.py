@@ -88,6 +88,9 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     from threadpoolctl import threadpool_limits
     from lightning.fabric import Fabric
 
+    from rich import print
+    from rich.markdown import Markdown
+
     try:
         from kraken.lib.xml import XMLPage
         from kraken.serialization import render_report
@@ -207,4 +210,4 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                                 dels,
                                 subs)
             logger.info(rep)
-            message(rep)
+        print(Markdown(rep))
