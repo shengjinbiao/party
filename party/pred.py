@@ -63,6 +63,7 @@ def _baseline_to_bbox(line: 'BaselineLine') -> 'BBoxLine':
     """
     d = asdict(line)
     d.pop('baseline')
+    d.pop('type')
     flat_box = [point for pol in d.pop('boundary') for point in pol]
     xmin, xmax = min(flat_box[::2]), max(flat_box[::2])
     ymin, ymax = min(flat_box[1::2]), max(flat_box[1::2])
