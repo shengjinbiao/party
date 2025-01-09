@@ -39,7 +39,7 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='Batch sample size')
 @click.option('-m', '--load-from-repo',
-              default='10.5281/zenodo.14616981',
+              default=None
               show_default=True,
               help="HTRMoPo identifier of the party model to evaluate")
 @click.option('-i', '--load-from-file',
@@ -67,7 +67,9 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     Tests a model on XML input data.
     """
     if load_from_file and load_from_repo:
-        raise click.BadOptionsUsage('load_from_file', 'load_from_* options are mutually exclusive.')
+        raise click.BadOptionUsage('load_from_file', 'load_from_* options are mutually exclusive.')
+    elif load_from_file is None and load_from_repo is None:
+        load_from_repo = '10.5281/zenodo.14616981'
 
     try:
         accelerator, device = to_ptl_device(ctx.meta['device'])
