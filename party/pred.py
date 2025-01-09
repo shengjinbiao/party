@@ -23,7 +23,7 @@ import logging
 
 from dataclasses import asdict
 
-from kraken.containers import BBoxOCRRecord, BaselineOCRRecord
+from kraken.containers import BBoxOCRRecord, BaselineOCRRecord, BBoxLine
 
 from typing import TYPE_CHECKING, Union, Tuple, Optional, Literal, Generator
 
@@ -37,7 +37,7 @@ logger = logging.getLogger('party')
 if TYPE_CHECKING:
     from party.fusion import PartyModel
     from PIL import Image
-    from kraken.containers import Segmentation, BaselineLine, BBoxLine, ocr_record
+    from kraken.containers import Segmentation, BaselineLine, ocr_record
     from lightning.fabric import Fabric
 
 __all__ = ['batched_pred']
