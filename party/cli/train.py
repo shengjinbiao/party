@@ -231,6 +231,8 @@ def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
 
     if load_from_checkpoint and load_from_repo:
         raise click.BadOptionsUsage('load_from_checkpoint', 'load_from_* options are mutually exclusive.')
+    elif load_from_checkpoint is None and load_from_repo is None:
+        load_from_repo = '10.5281/zenodo.14616981'
 
     if augment:
         try:
@@ -329,9 +331,9 @@ def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
             message(f'Loading from checkpoint {load_from_checkpoint}.')
             model = RecognitionModel.load_from_checkpoint(load_from_checkpoint,
                                                           **hyper_params)
-        elif load_from_hub:
+        elif load_from_repo:
             message(f'Loading from huggingface hub {load_from_hub}.')
-            model = RecognitionModel.load_from_repo(hub_id=load_from_repo,
+            model = RecognitionModel.load_from_repo(load_from_repo,
                                                     **hyper_params)
         else:
             message('Initializing new model.')

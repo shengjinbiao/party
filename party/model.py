@@ -157,8 +157,22 @@ class RecognitionModel(L.LightningModule):
         """
         Loads weights from a huggingface hub repository.
         """
+        import uuid
+
+        from pathlib import Path
+        from htrmopo import get_model
+        from platformdirs import user_data_dir
+
         module = cls(*args, **kwargs, pretrained=False)
-        module.model = PartyModel.from_safetensors(id)
+
+        path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, id))
+        try:
+            get_model(id, path=path, abort_if_exists=True)
+        except ValueError:
+            pass
+        model_path = path / 'model.safetensors'
+
+        module.model = PartyModel.from_safetensors(model_path)
         module.model = torch.compile(module.model)
         module.model.train()
         return module
