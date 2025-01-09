@@ -52,9 +52,6 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 @click.option('--workers', show_default=True, default=1,
               type=click.IntRange(0),
               help='Number of worker processes when running on CPU.')
-@click.option('--threads', show_default=True, default=1,
-              type=click.IntRange(1),
-              help='Max size of thread pools for OpenMP/BLAS operations.')
 @click.option('-u', '--normalization', show_default=True, type=click.Choice(['NFD', 'NFKD', 'NFC', 'NFKC']),
               default=None, help='Ground truth normalization')
 @click.option('-n', '--normalize-whitespace/--no-normalize-whitespace',
