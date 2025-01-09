@@ -166,10 +166,9 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
         test_wer = WordErrorRate()
 
         with KrakenProgressBar() as progress:
-            file_prog = progress.add_task('Files', total=len(input))
-            for input_file, output_file in input:
+            file_prog = progress.add_task('Files', total=len(test_set))
+            for input_file in test_set:
                 input_file = Path(input_file)
-                output_file = Path(output_file)
 
                 doc = XMLPage(input_file)
                 im = Image.open(doc.imagename)
@@ -182,7 +181,9 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                                          prompt_mode=curves,
                                          batch_size=batch_size)
 
-                for x, y in zip(predictor, bounds.lines):
+                for pred, line in zip(predictor, bounds.lines):
+                    x = pred.prediction
+                    y = line.text
                     logger.info(f'pred: {x}')
                     chars += len(y)
                     c, algn1, algn2 = global_align(y, x)

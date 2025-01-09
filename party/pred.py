@@ -105,7 +105,7 @@ class batched_pred(object):
             else:
                 line_prompt_fn = _box_prompt_fn if m_prompt_mode == 'boxes' else _curve_prompt_fn
                 self.prompt_mode = 'boxes' if m_prompt_mode == 'boxes' else 'curves'
-        elif m_prompt_mode != 'both' or m_prompt_mode != prompt_mode:
+        elif m_prompt_mode != 'both' and m_prompt_mode != prompt_mode:
             raise ValueError(f'Model expects prompt {m_prompt_mode} and explicit line prompt mode {prompt_mode} selected.')
         else:
             line_prompt_fn = _box_prompt_fn if prompt_mode == 'boxes' else _curve_prompt_fn

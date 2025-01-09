@@ -471,7 +471,7 @@ class PartyModel(nn.Module):
                                device: torch.device = torch.device('cpu')):
 
         if self.ready_for_generation:
-            raise ValueError('Model has already been prepared for generation!')
+            logger.info('Model has already been prepared for generation!')
 
         self._batch_size = batch_size
         self._max_generated_tokens = max_generated_tokens
@@ -526,7 +526,7 @@ class PartyModel(nn.Module):
 
         encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
 
-        eos_token = torch.tensor(eos_id, device=curves.device, dtype=torch.long)
+        eos_token = torch.tensor(eos_id, device=encoder_hidden_states.device, dtype=torch.long)
 
         line_pos = curves if curves is not None else boxes
         batches = torch.split(line_pos, self._batch_size)
@@ -536,7 +536,7 @@ class PartyModel(nn.Module):
                                    1,
                                    encoder_hidden_states.size(1)),
                                   dtype=torch.bool,
-                                  device=curves.device)
+                                  device=encoder_hidden_states.device)
 
         for batch_idx, batch in enumerate(batches):
             bsz = batch.size(0)
@@ -568,11 +568,11 @@ class PartyModel(nn.Module):
             curr_pos = 1
 
             # keeps track of EOS tokens emitted by each sequence in a batch
-            eos_token_reached = torch.zeros(bsz, dtype=torch.bool, device=curves.device)
+            eos_token_reached = torch.zeros(bsz, dtype=torch.bool, device=encoder_hidden_states.device)
             eos_token_reached |= tokens[:, -1] == eos_token
 
             # mask used for setting all values from EOS token to pad_id in output sequences.
-            eos_token_mask = torch.ones(bsz, 0, dtype=torch.int32, device=curves.device)
+            eos_token_mask = torch.ones(bsz, 0, dtype=torch.int32, device=encoder_hidden_states.device)
 
             if eos_token_reached.all():
                 break
