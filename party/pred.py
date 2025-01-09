@@ -112,18 +112,19 @@ class batched_pred(object):
             self.prompt_mode = prompt_mode
 
         m_dtype = next(model.parameters()).dtype
+        m_device = next(model.parameters()).device
 
         # load image transforms
         im_transforms = get_default_transforms(dtype=m_dtype)
 
         # prepare model for generation
-        model.prepare_for_generation(batch_size=batch_size)
+        model.prepare_for_generation(batch_size=batch_size, device=m_device)
         model = model.eval()
 
         with fabric.init_tensor(), torch.inference_mode():
-            image_input = im_transforms(im).unsqueeze(0)
+            image_input = im_transforms(im).unsqueeze(0).to(m_device)
             lines = torch.tensor([line_prompt_fn(line, im.size) for line in bounds.lines])
-            lines = lines.view(-1, 4, 2)
+            lines = lines.view(-1, 4, 2).to(m_device)
             self.len = len(lines)
 
             self._pred = zip(model.predict_string(encoder_input=image_input,
