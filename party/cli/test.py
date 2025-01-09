@@ -23,7 +23,7 @@ import logging
 
 from typing import List
 
-from .util import _expand_gt, _validate_manifests, message, to_ptl_device
+from .util import _expand_gt, _validate_manifests, to_ptl_device
 
 from party.default_specs import RECOGNITION_HYPER_PARAMS
 
@@ -168,7 +168,12 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
             for input_file in test_set:
                 input_file = Path(input_file)
 
-                doc = XMLPage(input_file)
+                try:
+                    doc = XMLPage(input_file)
+                except ValueError:
+                    logger.warning(f'{doc} is not parseable.')
+                    continue
+
                 im = Image.open(doc.imagename)
                 bounds = doc.to_container()
                 rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
