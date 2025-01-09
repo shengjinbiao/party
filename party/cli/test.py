@@ -49,7 +49,6 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 @click.option('-e', '--evaluation-files', show_default=True, default=None, multiple=True,
               callback=_validate_manifests, type=click.File(mode='r', lazy=True),
               help='File(s) with paths to evaluation data.')
-@click.option('-d', '--device', show_default=True, default='cpu', help='Select device to use (cpu, cuda:0, cuda:1, ...)')
 @click.option('--workers', show_default=True, default=1,
               type=click.IntRange(0),
               help='Number of worker processes when running on CPU.')
@@ -65,7 +64,7 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
 @click.argument('test_set', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
-         device, workers, threads, normalization, normalize_whitespace, curves,
+         workers, threads, normalization, normalize_whitespace, curves,
          compile, quantize, test_set):
     """
     Tests a model on XML input data.
