@@ -61,7 +61,7 @@ logging.getLogger("lightning.fabric.utilities.seed").setLevel(logging.ERROR)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
 @click.argument('test_set', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
-         workers, threads, normalization, normalize_whitespace, curves,
+         workers, normalization, normalize_whitespace, curves,
          compile, quantize, test_set):
     """
     Tests a model on XML input data.
