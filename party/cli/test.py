@@ -89,7 +89,6 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     from lightning.fabric import Fabric
 
     from rich import print
-    from rich.markdown import Markdown
 
     try:
         from kraken.lib.xml import XMLPage
@@ -210,4 +209,4 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                                 dels,
                                 subs)
             logger.info(rep)
-        print(Markdown(rep))
+        print(rep)
