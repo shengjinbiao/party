@@ -75,15 +75,20 @@ def _repl_page(fname, preds):
 @click.option('-I', '--batch-input', multiple=True, help='Glob expression to add multiple files at once.')
 @click.option('-o', '--suffix', default='', show_default=True,
               help='Suffix for output files from batch and PDF inputs.')
-@click.option('-m', '--model',
-              default='10.5281/zenodo.14616981',
+@click.option('-m', '--load-from-repo',
+              default=None,
               show_default=True,
-              help="HTRMoPo identifier of the party model")
+              help="HTRMoPo identifier of the party model to evaluate")
+@click.option('-mi', '--load-from-file',
+              default=None,
+              show_default=True,
+              help="Path to the party model to evaluate")
 @click.option('--curves/--boxes', help='Encode line prompts as bounding boxes or curves', default=None, show_default=True)
 @click.option('--compile/--no-compile', help='Switch to enable/disable torch.compile() on model', default=True, show_default=True)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
 @click.option('-b', '--batch-size', default=2, help='Set batch size in generator')
-def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch_size):
+def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
+        curves, compile, quantize, batch_size):
     """
     Runs text recognition on pre-segmented images in XML format.
     """
@@ -93,6 +98,11 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
         from kraken.lib.progress import KrakenProgressBar, KrakenDownloadProgressBar
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
+
+    if load_from_file and load_from_repo:
+        raise click.BadOptionUsage('load_from_file', 'load_from_* options are mutually exclusive.')
+    elif load_from_file is None and load_from_repo is None:
+        load_from_repo = '10.5281/zenodo.14616981'
 
     import os
     import glob
@@ -116,16 +126,18 @@ def ocr(ctx, input, batch_input, suffix, model, curves, compile, quantize, batch
     except Exception as e:
         raise click.BadOptionUsage('device', str(e))
 
-    path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, model))
-    try:
-        with KrakenDownloadProgressBar() as progress:
-            download_task = progress.add_task(f'Downloading {model}', total=0, visible=True)
-            get_model(model,
-                      path=path,
-                      callback=lambda total, advance: progress.update(download_task, total=total, advance=advance),
-                      abort_if_exists=True)
-    except:
-        print(f'Model {model} already downloaded.')
+    if load_from_repo:
+        path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, load_from_repo))
+        try:
+            with KrakenDownloadProgressBar() as progress:
+                download_task = progress.add_task(f'Downloading {load_from_repo}', total=0, visible=True)
+                get_model(load_from_repo,
+                          path=path,
+                          callback=lambda total, advance: progress.update(download_task, total=total, advance=advance),
+                          abort_if_exists=True)
+        except ValueError:
+            print(f'Model {load_from_repo} already downloaded.')
+        load_from_file = path / 'model.safetensors'
 
     if curves is True:
         curves = 'curves'
