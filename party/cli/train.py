@@ -135,6 +135,8 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               show_default=True,
               default=RECOGNITION_HYPER_PARAMS['min_epochs'],
               help='Minimal number of epochs to train for when using early stopping.')
+@click.option('--freeze-encoder/--no-freeze-encoder', show_default=True,
+              default=False, help='Switch to freeze the encoder')
 @click.option('--lag',
               show_default=True,
               default=RECOGNITION_HYPER_PARAMS['lag'],
@@ -150,7 +152,11 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               type=click.Choice(['Adam',
                                  'AdamW',
                                  'SGD',
-                                 'Mars']),
+                                 'Mars',
+                                 'Adam8bit',
+                                 'AdamW8bit',
+                                 'Adam4bit',
+                                 'AdamW4bit']),
               help='Select optimizer')
 @click.option('-r', '--lrate', show_default=True, default=RECOGNITION_HYPER_PARAMS['lr'], help='Learning rate')
 @click.option('-m', '--momentum', show_default=True, default=RECOGNITION_HYPER_PARAMS['momentum'], help='Momentum')
@@ -218,11 +224,11 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               help='Number of batches to accumulate gradient across.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
-          quit, epochs, min_epochs, lag, min_delta, optimizer, lrate, momentum,
-          weight_decay, gradient_clip_val, warmup, schedule, gamma, step_size,
-          sched_patience, cos_max, cos_min_lr, training_files,
-          evaluation_files, workers, threads, augment, prompt_mode,
-          accumulate_grad_batches, ground_truth):
+          quit, epochs, min_epochs, freeze_encoder, lag, min_delta, optimizer,
+          lrate, momentum, weight_decay, gradient_clip_val, warmup, schedule,
+          gamma, step_size, sched_patience, cos_max, cos_min_lr,
+          training_files, evaluation_files, workers, threads, augment,
+          prompt_mode, accumulate_grad_batches, ground_truth):
     """
     Trains a model from image-text pairs.
     """
@@ -256,6 +262,7 @@ def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
                          'quit': quit,
                          'epochs': epochs,
                          'min_epochs': min_epochs,
+                         'freeze_encoder': freeze_encoder,
                          'lag': lag,
                          'min_delta': min_delta,
                          'optimizer': optimizer,

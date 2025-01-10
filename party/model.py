@@ -59,6 +59,7 @@ class RecognitionModel(L.LightningModule):
                  encoder_input_size: Tuple[int, int] = (2560, 1920),
                  decoder: str = 'mittagessen/bytellama_oscar',
                  pretrained: bool = True,
+                 freeze_encoder: bool = False,
                  **kwargs):
         super().__init__()
 
@@ -87,6 +88,10 @@ class RecognitionModel(L.LightningModule):
                                 decoder=decoder_model,
                                 encoder_embed_dim=encoder_model.feature_info[l_idx]['num_chs'],
                                 decoder_embed_dim=decoder_model.tok_embeddings.embedding_dim)
+
+        if freeze_encoder:
+            for param in self.model.encoder.parameters():
+                param.requires_grad = False
 
         self.model = torch.compile(self.model)
         self.model.train()
@@ -195,7 +200,7 @@ class RecognitionModel(L.LightningModule):
     # scheduler are then only performed at the end of the epoch.
     def configure_optimizers(self):
         return _configure_optimizer_and_lr_scheduler(self.hparams,
-                                                     self.model.parameters(),
+                                                     filter(lambda p: p.requires_grad, self.model.parameters())
                                                      loss_tracking_mode='min')
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
@@ -240,6 +245,9 @@ def _configure_optimizer_and_lr_scheduler(hparams, params, loss_tracking_mode='m
     logger.debug(f'Constructing {optimizer} optimizer (lr: {lr}, momentum: {momentum})')
     if optimizer in ['Adam', 'AdamW']:
         optim = getattr(torch.optim, optimizer)(params, lr=lr, weight_decay=weight_decay)
+    elif optimizer in ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
+        import torchao.prototype.low_bit_optim
+        optim = getattr(torchao.prototype.low_bit_optim, optimizer)(params, lr=lr, weight_decay=weight_decay)
     elif optimizer == 'Mars':
         from timm.optim import Mars
         optim = Mars(params, lr=lr, weight_decay=weight_decay, caution=True)
