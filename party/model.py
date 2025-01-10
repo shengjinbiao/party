@@ -212,7 +212,7 @@ class RecognitionModel(L.LightningModule):
         if self.hparams.warmup and self.trainer.global_step < self.hparams.warmup:
             lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.hparams.warmup)
             for pg in optimizer.param_groups:
-                if self.hparams.optimizer in  ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
+                if self.hparams.optimizer not in  ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
                     pg['lr'] = lr_scale * self.hparams.lr
                 else:
                     pg['lr'].fill_(lr_scale * self.hparams.lr)
