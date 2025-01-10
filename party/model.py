@@ -200,7 +200,7 @@ class RecognitionModel(L.LightningModule):
     # scheduler are then only performed at the end of the epoch.
     def configure_optimizers(self):
         return _configure_optimizer_and_lr_scheduler(self.hparams,
-                                                     filter(lambda p: p.requires_grad, self.model.parameters())
+                                                     filter(lambda p: p.requires_grad, self.model.parameters()),
                                                      loss_tracking_mode='min')
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
