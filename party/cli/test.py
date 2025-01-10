@@ -150,12 +150,10 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
         if quantize:
             click.echo('Quantizing model ', nl=False)
-            try:
-                from optimum.quanto import quantize, qint8
-                quantize(model, weights=qint8, activtions=qint8)
-                click.secho('\u2713', fg='green')
-            except Exception:
-                click.secho('\u2717', fg='red')
+            import torchao
+            torchao.quantization.utils.recommended_inductor_config_setter()
+
+            click.secho('\u2713', fg='green')
 
         algn_gt: List[str] = []
         algn_pred: List[str] = []

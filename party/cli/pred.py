@@ -175,8 +175,8 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
         if quantize:
             click.echo('Quantizing model ', nl=False)
             try:
-                from optimum.quanto import quantize, qint8
-                quantize(model, weights=qint8, activtions=qint8)
+                import torchao
+                torchao.quantization.utils.recommended_inductor_config_setter()
                 click.secho('\u2713', fg='green')
             except Exception:
                 click.secho('\u2717', fg='red')

@@ -42,7 +42,7 @@ files on all available GPUs:
 
 ::
 
-        $ party --precision bf16-true train --load-from-hub mittagessen/llama_party --workers 32 -f train.lst -e val.lst
+        $ party train --load-from-repo 10.5281/zenodo.14616981 --workers 32 -f train.lst -e val.lst
 
 With the default parameters both baseline and bounding box prompts are randomly
 sampled from the training data. It is suggested that you fine-tune the model
@@ -51,14 +51,30 @@ segmentation method produces, i.e.:
 
 ::
 
-        $ party --precision bf16-true train --load-from-hub mittagessen/llama_party -f train.lst -e val.lst --prompt-mode curves
+        $ party train --load-from-repo 10.5281/zenodo.14616981 -f train.lst -e val.lst --prompt-mode curves
 
 or:
 
 ::
 
-        $ party --precision bf16-true train --load-from-hub mittagessen/llama_party -f train.lst -e val.lst --prompt-mode boxes
+        $ party train --load-from-repo 10.5281/zenodo.14616981 -f train.lst -e val.lst --prompt-mode boxes
 
+To continue training from an existing checkpoint 
+
+::
+        
+        $ party train --load-from-checkpoint checkpoint_03-0.0640.ckpt -f train.lst -e val.lst
+
+
+Checkpoint conversion
+---------------------
+
+Checkpoints need to be converted into a safetensors format before being usable
+for inference and testing.
+
+::
+
+        $  party convert -o model.safetensors checkpoint.ckpt
 
 Inference
 ---------
@@ -68,11 +84,50 @@ pretrained model run:
 
 ::
 
-        $ party ocr -i input_file.xml output_file.xml
+        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.14616981
 
 The paths to the image file(s) is automatically extracted from the XML input
 file(s).
 
-It is recommended to adjust the `--compile/--no-compile`,
-`--quantize/--no-quantize`, and `--batch-size` arguments to optimize inference
-speed for your inference environment.
+When the recognizer supports both curves and box prompts, curves are selected
+by default. To select a prompt type explicitly you can use the `--curves` and
+`--boxes` switches:
+
+::
+
+        $ party -d cuda:0 ocr -i in.xml out.xml --curves --compile
+        $ party -d cuda:0 ocr -i in.xml out.xml --boxes --compile
+
+Inference from a converted checkpoint:
+
+::
+
+        $ party -d cuda:0 ocr -i in.xml out.xml --curves --load-from-file model.safetensors
+
+Testing
+-------
+
+Testing for now only works from XML files. As with for inference curve prompts
+are selected if the model supports both, but an explicit line prompt type can
+be selected.
+
+::
+
+        $  party -d cuda:0 test --curves --load-from-file arabic.safetensors  */*.xml
+        $  party -d cuda:0 test --boxes --load-from-file arabic.safetensors  */*.xml
+        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.14616981 */*.xml
+        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.14616981 */*.xml
+
+Performance
+-----------
+
+Training and inference resource consumption is highly dependent on various
+optimizations being enabled. Torch compilation which is required for various
+attention optimizations is enabled per default but lower precision training
+which isn't supported on CPU needs to be configured manually with `party
+--precision bf16-true ...`.
+
+Moderate speedups on CPU are possible with intra-op parallelism (`party
+--threads 4 ocr ...`).
+
+Quantization isn't yet supported.
