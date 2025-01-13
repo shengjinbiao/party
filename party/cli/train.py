@@ -339,7 +339,7 @@ def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
             model = RecognitionModel.load_from_checkpoint(load_from_checkpoint,
                                                           **hyper_params)
         elif load_from_repo:
-            message(f'Loading from huggingface hub {load_from_hub}.')
+            message(f'Loading from huggingface hub {load_from_repo}.')
             model = RecognitionModel.load_from_repo(load_from_repo,
                                                     **hyper_params)
         else:
