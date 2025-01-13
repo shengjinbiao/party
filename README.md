@@ -1,5 +1,4 @@
-party
-=====
+# party
 
 party is **PA**\ ge-wise **R**\ ecognition of **T**\ ext-\ **y**. It is a
 replacement for conventional text recognizers in ATR system using conventional
@@ -7,11 +6,9 @@ baseline+bounding polygon (where it eliminates the need for bounding polygons)
 and bounding box line data models. 
 
 Party consists of a Swin vision transformer encoder, baseline positional
-embeddings, and a `tiny Llama decoder
-<https://github.com/mittagessen/bytellama>`_ trained on octet tokenization.
+embeddings, and a [tiny Llama decoder](https://github.com/mittagessen/bytellama) trained on octet tokenization.
 
-Metrics
--------
+## Metrics
 
 The base model has been pretrained on a very diverse collection of datasets in
 a dozen writing systems and even more languages, in addition to the language
@@ -45,30 +42,21 @@ individual code point.
 Georgian, Syriac, New, and Hebrew are very poorly recognized at the moment. We
 are working on it.
 
-Installation
-------------
+## Installation
 
-::
+    $ pip install .
 
-        $ pip install .
-
-
-Fine Tuning
------------
+## Fine Tuning
 
 Party needs to be trained on datasets precompiled from PageXML or ALTO files
 containing line-wise transcriptions and baseline information for each line. The
 binary dataset format is **NOT** compatible with kraken but the process of
 compilation is fairly similar:
 
-::
-
         $ party compile -o dataset.arrow *.xml
 
 To fine-tune the pretrained base model dataset files in listed in manifest
 files on all available GPUs:
-
-::
 
         $ party train --load-from-repo 10.5281/zenodo.14616981 --workers 32 -f train.lst -e val.lst
 
@@ -77,40 +65,28 @@ sampled from the training data. It is suggested that you fine-tune the model
 with uni-modal line embeddings by only selecting the line format that your
 segmentation method produces, i.e.:
 
-::
-
         $ party train --load-from-repo 10.5281/zenodo.14616981 -f train.lst -e val.lst --prompt-mode curves
 
 or:
-
-::
 
         $ party train --load-from-repo 10.5281/zenodo.14616981 -f train.lst -e val.lst --prompt-mode boxes
 
 To continue training from an existing checkpoint 
 
-::
-        
         $ party train --load-from-checkpoint checkpoint_03-0.0640.ckpt -f train.lst -e val.lst
 
 
-Checkpoint conversion
----------------------
+## Checkpoint conversion
 
 Checkpoints need to be converted into a safetensors format before being usable
 for inference and testing.
 
-::
-
         $  party convert -o model.safetensors checkpoint.ckpt
 
-Inference
----------
+## Inference
 
 To recognize text in pre-segmented page images in PageXML or ALTO with the
 pretrained model run:
-
-::
 
         $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.14616981
 
@@ -121,33 +97,25 @@ When the recognizer supports both curves and box prompts, curves are selected
 by default. To select a prompt type explicitly you can use the `--curves` and
 `--boxes` switches:
 
-::
-
         $ party -d cuda:0 ocr -i in.xml out.xml --curves --compile
         $ party -d cuda:0 ocr -i in.xml out.xml --boxes --compile
 
 Inference from a converted checkpoint:
 
-::
-
         $ party -d cuda:0 ocr -i in.xml out.xml --curves --load-from-file model.safetensors
 
-Testing
--------
+## Testing
 
 Testing for now only works from XML files. As with for inference curve prompts
 are selected if the model supports both, but an explicit line prompt type can
 be selected.
-
-::
 
         $  party -d cuda:0 test --curves --load-from-file arabic.safetensors  */*.xml
         $  party -d cuda:0 test --boxes --load-from-file arabic.safetensors  */*.xml
         $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.14616981 */*.xml
         $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.14616981 */*.xml
 
-Performance
------------
+## Performance
 
 Training and inference resource consumption is highly dependent on various
 optimizations being enabled. Torch compilation which is required for various
