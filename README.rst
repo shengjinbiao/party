@@ -10,6 +10,41 @@ Party consists of a Swin vision transformer encoder, baseline positional
 embeddings, and a `tiny Llama decoder
 <https://github.com/mittagessen/bytellama>`_ trained on octet tokenization.
 
+Metrics
+-------
+
+The base model has been pretrained on a very diverse collection of datasets in
+a dozen writing systems and even more languages, in addition to the language
+model decoder being trained on all 151 languages in the OSCAR corpus. No
+attempts have been made to adjust the frequency of particular data so character
+accuracy is fairly uneven across the corpus. 
+
+The current base model's character accuracies on the validation set with curve
+and bounding box prompts (sorted by ascending curve error rate):
+
+| Script    | Code Points | %Right (curves) | %Right (boxes) |
+| :-------- | :---------- | :-------------- | :------------- |
+| Hiragana  | 1806        |  100.00%        | 100.00%        | 
+| Han       | 119259      |  98.67%         | 98.67%         |
+| Katakana  | 611         |  97.87%         | 97.87%         |
+| Cyrillic  | 29431       |  94.43%         | 94.22%         |
+| Common    | 69462       |  91.09%         | 89.82%         |
+| Latin     | 221855      |  90.19%         | 88.49%         |
+| Arabic    | 24992       |  89.04%         | 89.04%         |
+| Greek     | 135         |  85.19%         | 84.44%         |
+| Inherited | 4092        |  74.41%         | 74.07%         |
+| Georgian  | 2066        |  65.25%         | 69.51%         |
+| Unknown   | 201         |  51.74%         | 50.75%         |
+| Syriac    | 599         |  45.74%         | 41.24%         |
+| Newa      | 641         |  27.46%         | 24.49%         |
+| Hebrew    | 51          |  25.49%         | 23.53%         |
+
+The script types are determined from the Unicode script property of each
+individual code point.
+
+Georgian, Syriac, New, and Hebrew are very poorly recognized at the moment. We
+are working on it.
+
 Installation
 ------------
 
@@ -29,13 +64,6 @@ compilation is fairly similar:
 ::
 
         $ party compile -o dataset.arrow *.xml
-
-It is recommended not to enable BiDi reordering as the pretrained language
-model and the base model have been trained to recognize RTL text in logical
-order.
-
-It is recommended to disable BiDi reordering as the pretrained model has been
-trained to recognize RTL text in logical order.
 
 To fine-tune the pretrained base model dataset files in listed in manifest
 files on all available GPUs:
