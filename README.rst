@@ -22,71 +22,22 @@ accuracy is fairly uneven across the corpus.
 The current base model's character accuracies on the validation set with curve
 and bounding box prompts (sorted by ascending curve error rate):
 
-.. list-table::
-
-   :widths: 50 25 25 25
-   :header-rows: 1
-
-   * - Script
-     - Code Points
-     - % Right (curves)
-     - % Right (boxes)
-   * - Hiragana  
-     - 1806        
-     - 100.00%        
-     - 100.00%
-   * - Han       
-     - 119259      
-     - 98.67%         
-     - 98.67%
-   * - Katakana  
-     - 611         
-     - 97.87%         
-     - 97.87%
-   * - Cyrillic  
-     - 29431       
-     - 94.43%         
-     - 94.22%
-   * - Common    
-     - 69462       
-     - 91.09%        
-     - 89.82%
-   * - Latin     
-     - 221855      
-     - 90.19%         
-     - 88.49%
-   * - Arabic    
-     - 24992       
-     - 89.04%         
-     - 89.04%
-   * - Greek     
-     - 135         
-     - 85.19%         
-     - 84.44%
-   * - Inherited 
-     - 4092        
-     - 74.41%         
-     - 74.07%
-   * - Georgian  
-     - 2066        
-     - 65.25%         
-     - 69.51%
-   * - Unknown   
-     - 201         
-     - 51.74%         
-     - 50.75%
-   * - Syriac    
-     - 599         
-     - 45.74%         
-     - 41.24%
-   * - Newa      
-     - 641         
-     - 27.46%         
-     - 24.49%
-   * - Hebrew    
-     - 51          
-     - 25.49%         
-     - 23.53%
+| Script    | Code Points | %Right (curves) | %Right (boxes) |
+| :-------- | :---------- | :-------------- | :------------- |
+| Hiragana  | 1806        |  100.00%        | 100.00%        | 
+| Han       | 119259      |  98.67%         | 98.67%         |
+| Katakana  | 611         |  97.87%         | 97.87%         |
+| Cyrillic  | 29431       |  94.43%         | 94.22%         |
+| Common    | 69462       |  91.09%         | 89.82%         |
+| Latin     | 221855      |  90.19%         | 88.49%         |
+| Arabic    | 24992       |  89.04%         | 89.04%         |
+| Greek     | 135         |  85.19%         | 84.44%         |
+| Inherited | 4092        |  74.41%         | 74.07%         |
+| Georgian  | 2066        |  65.25%         | 69.51%         |
+| Unknown   | 201         |  51.74%         | 50.75%         |
+| Syriac    | 599         |  45.74%         | 41.24%         |
+| Newa      | 641         |  27.46%         | 24.49%         |
+| Hebrew    | 51          |  25.49%         | 23.53%         |
 
 The script types are determined from the Unicode script property of each
 individual code point.
