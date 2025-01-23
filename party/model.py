@@ -162,20 +162,11 @@ class RecognitionModel(L.LightningModule):
         """
         Loads weights from a huggingface hub repository.
         """
-        import uuid
-
-        from pathlib import Path
         from htrmopo import get_model
-        from platformdirs import user_data_dir
 
         module = cls(*args, **kwargs, pretrained=False)
 
-        path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, id))
-        try:
-            get_model(id, path=path, abort_if_exists=True)
-        except ValueError:
-            pass
-        model_path = path / 'model.safetensors'
+        model_path = get_model(id) / 'model.safetensors'
 
         module.model = PartyModel.from_safetensors(model_path)
         module.model = torch.compile(module.model)
@@ -212,7 +203,7 @@ class RecognitionModel(L.LightningModule):
         if self.hparams.warmup and self.trainer.global_step < self.hparams.warmup:
             lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.hparams.warmup)
             for pg in optimizer.param_groups:
-                if self.hparams.optimizer not in  ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
+                if self.hparams.optimizer not in ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
                     pg['lr'] = lr_scale * self.hparams.lr
                 else:
                     pg['lr'].fill_(lr_scale * self.hparams.lr)

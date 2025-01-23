@@ -16,10 +16,9 @@
 """Model format conversion routines"""
 import json
 import torch
-import logging
 
 from safetensors.torch import save_file
-from typing import Generator, Optional, Union, List, TYPE_CHECKING
+from typing import Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from os import PathLike

@@ -59,7 +59,6 @@ def convert(ctx, output, model_card, checkpoint_path):
     message(f'Output file written to {output}')
 
 
-
 @click.command('compile')
 @click.pass_context
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='dataset.arrow', help='Output dataset file')

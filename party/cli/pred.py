@@ -106,14 +106,12 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
 
     import os
     import glob
-    import uuid
     import torch
 
     from PIL import Image
     from pathlib import Path
     from lightning.fabric import Fabric
 
-    from platformdirs import user_data_dir
     from htrmopo import get_model
 
     from threadpoolctl import threadpool_limits
@@ -127,17 +125,10 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
         raise click.BadOptionUsage('device', str(e))
 
     if load_from_repo:
-        path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, load_from_repo))
-        try:
-            with KrakenDownloadProgressBar() as progress:
-                download_task = progress.add_task(f'Downloading {load_from_repo}', total=0, visible=True)
-                get_model(load_from_repo,
-                          path=path,
-                          callback=lambda total, advance: progress.update(download_task, total=total, advance=advance),
-                          abort_if_exists=True)
-        except ValueError:
-            print(f'Model {load_from_repo} already downloaded.')
-        load_from_file = path / 'model.safetensors'
+        with KrakenDownloadProgressBar() as progress:
+            download_task = progress.add_task(f'Downloading {load_from_repo}', total=0, visible=True)
+            load_from_file = get_model(load_from_repo,
+                                       callback=lambda total, advance: progress.update(download_task, total=total, advance=advance)) / 'model.safetensors'
 
     if curves is True:
         curves = 'curves'
@@ -162,7 +153,7 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
 
     with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']), fabric.init_tensor(), fabric.init_module():
 
-        model = PartyModel.from_safetensors(path / 'model.safetensors')
+        model = PartyModel.from_safetensors(load_from_file)
 
         if compile:
             click.echo('Compiling model ', nl=False)

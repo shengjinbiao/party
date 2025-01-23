@@ -76,13 +76,11 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     except Exception as e:
         raise click.BadOptionUsage('device', str(e))
 
-    import uuid
     import torch
 
     from PIL import Image
     from pathlib import Path
     from htrmopo import get_model
-    from platformdirs import user_data_dir
     from threadpoolctl import threadpool_limits
     from lightning.fabric import Fabric
 
@@ -104,17 +102,10 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     torch.set_float32_matmul_precision('medium')
 
     if load_from_repo:
-        path = Path(user_data_dir('htrmopo')) / str(uuid.uuid5(uuid.NAMESPACE_DNS, load_from_repo))
-        try:
-            with KrakenDownloadProgressBar() as progress:
-                download_task = progress.add_task(f'Downloading {load_from_repo}', total=0, visible=True)
-                get_model(load_from_repo,
-                          path=path,
-                          callback=lambda total, advance: progress.update(download_task, total=total, advance=advance),
-                          abort_if_exists=True)
-        except ValueError:
-            print(f'Model {load_from_repo} already downloaded.')
-        load_from_file = path / 'model.safetensors'
+        with KrakenDownloadProgressBar() as progress:
+            download_task = progress.add_task(f'Downloading {load_from_repo}', total=0, visible=True)
+            load_from_file = get_model(load_from_repo,
+                                       callback=lambda total, advance: progress.update(download_task, total=total, advance=advance)) / 'model.safetensors'
 
     if curves is True:
         curves = 'curves'
