@@ -22,7 +22,6 @@ import numpy as np
 import lightning.pytorch as L
 
 import tempfile
-import pillow_jxl # NOQA
 import pyarrow as pa
 
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
@@ -46,6 +45,11 @@ __all__ = ['TextLineDataModule']
 import logging
 
 logger = logging.getLogger(__name__)
+
+try:
+    import pillow_jxl # NOQA
+except ImportError:
+    logger.info('No JPEG-XL plugin found')
 
 Image.MAX_IMAGE_PIXELS = 20000 ** 2
 
