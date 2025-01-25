@@ -23,8 +23,6 @@ import lightning.pytorch as L
 
 from torch import nn
 from lightning.pytorch.callbacks import EarlyStopping
-from lightning.pytorch.utilities.memory import (garbage_collection_cuda,
-                                                is_oom_error)
 from torch.optim import lr_scheduler
 from torchmetrics.aggregation import MeanMetric
 
@@ -47,6 +45,7 @@ class RecognitionModel(L.LightningModule):
                  lr: float = 1e-3,
                  momentum: float = 0.9,
                  weight_decay: float = 1e-3,
+                 label_smoothing: float = 0.0,
                  schedule: Literal['cosine', 'exponential', 'step', 'reduceonplateau', 'constant'] = 'cosine',
                  step_size: int = 10,
                  gamma: float = 0.1,
@@ -96,7 +95,7 @@ class RecognitionModel(L.LightningModule):
         self.model = torch.compile(self.model)
         self.model.train()
 
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
         self.val_mean = MeanMetric()
 
@@ -104,48 +103,51 @@ class RecognitionModel(L.LightningModule):
         return self.model(encoder_input=x,
                           encoder_curves=curves)
 
-    def _step(self, batch):
-        try:
-            tokens = batch['tokens']
-            # shift the tokens to create targets
-            ignore_idxs = torch.full((tokens.shape[0], 1),
-                                     self.criterion.ignore_index,
-                                     dtype=tokens.dtype, device=tokens.device)
-            targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
-
-            # our tokens already contain BOS/EOS tokens so we just run it
-            # through the model after replacing ignored indices.
-            tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
-            logits = self.model(tokens=tokens,
-                                encoder_input=batch['image'],
-                                encoder_curves=batch['curves'],
-                                encoder_boxes=batch['boxes'])
-
-            logits = logits.reshape(-1, logits.shape[-1])
-            # Compute loss
-            return self.criterion(logits, targets)
-        except RuntimeError as e:
-            if is_oom_error(e):
-                logger.warning('Out of memory error in trainer. Skipping batch and freeing caches.')
-                garbage_collection_cuda()
-            else:
-                raise
-
     def training_step(self, batch, batch_idx):
-        loss = self._step(batch)
-        if loss:
-            self.log('train_loss',
-                     loss,
-                     batch_size=batch['tokens'].shape[0],
-                     on_step=True,
-                     prog_bar=True,
-                     logger=True)
+        tokens = batch['tokens']
+        # shift the tokens to create targets
+        ignore_idxs = torch.full((tokens.shape[0], 1),
+                                 self.criterion.ignore_index,
+                                 dtype=tokens.dtype, device=tokens.device)
+        targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
+
+        # our tokens already contain BOS/EOS tokens so we just run it
+        # through the model after replacing ignored indices.
+        tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
+        logits = self.model(tokens=tokens,
+                            encoder_input=batch['image'],
+                            encoder_curves=batch['curves'],
+                            encoder_boxes=batch['boxes'])
+
+        logits = logits.reshape(-1, logits.shape[-1])
+        loss = self.criterion(logits, targets)
+        self.log('train_loss',
+                 loss,
+                 batch_size=batch['tokens'].shape[0],
+                 on_step=True,
+                 prog_bar=True,
+                 logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self._step(batch)
-        if loss:
-            self.val_mean.update(loss)
+        tokens = batch['tokens']
+        # shift the tokens to create targets
+        ignore_idxs = torch.full((tokens.shape[0], 1),
+                                 self.criterion.ignore_index,
+                                 dtype=tokens.dtype, device=tokens.device)
+        targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
+
+        # our tokens already contain BOS/EOS tokens so we just run it
+        # through the model after replacing ignored indices.
+        tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
+        logits = self.model(tokens=tokens,
+                            encoder_input=batch['image'],
+                            encoder_curves=batch['curves'],
+                            encoder_boxes=batch['boxes'])
+
+        logits = logits.reshape(-1, logits.shape[-1])
+        loss = nn.CrossEntropyLoss()(logits, targets)
+        self.val_mean.update(loss)
         return loss
 
     def on_validation_epoch_end(self):

@@ -46,4 +46,6 @@ RECOGNITION_HYPER_PARAMS = {'freq': 1.0,
                             'warmup': 1000,
                             'accumulate_grad_batches': 4,
                             'gradient_clip_val': 1.0,
+                            'label_smoothing': 0.0,
+                            'attn_dropout': 0.0,
                             }

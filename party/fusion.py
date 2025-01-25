@@ -15,7 +15,7 @@
 # limitations under the License.
 """Llama vision fusion model"""
 import logging
-from typing import Generator, Optional, Union, List
+from typing import Generator, Optional, Union, List, TYPE_CHECKING
 
 import json
 import torch
@@ -28,6 +28,9 @@ from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
                            Llama3ScaledRoPE, llama3_mlp, PromptEncoder)
 
 from party.tokenizer import OctetTokenizer
+
+if TYPE_CHECKING:
+    from os import PathLike
 
 logger = logging.getLogger(__name__)
 
