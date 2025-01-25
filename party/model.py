@@ -57,6 +57,7 @@ class RecognitionModel(L.LightningModule):
                  encoder: str = 'swin_base_patch4_window12_384.ms_in22k',
                  encoder_input_size: Tuple[int, int] = (2560, 1920),
                  decoder: str = 'mittagessen/bytellama_oscar',
+                 decoder_attn_dropout: float = 0.0,
                  pretrained: bool = True,
                  freeze_encoder: bool = False,
                  **kwargs):
@@ -81,7 +82,8 @@ class RecognitionModel(L.LightningModule):
         l_red = encoder_model.feature_info[l_idx]['reduction']
 
         decoder_model = bytellama_vision_decoder(pretrained=decoder if pretrained else None,
-                                                 encoder_max_seq_len=encoder_input_size[0] // l_red * encoder_input_size[1] // l_red)
+                                                 encoder_max_seq_len=encoder_input_size[0] // l_red * encoder_input_size[1] // l_red,
+                                                 attn_dropout=decoder_attn_dropout)
 
         self.model = PartyModel(encoder=encoder_model,
                                 decoder=decoder_model,

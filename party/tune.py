@@ -31,13 +31,17 @@ def train_model(trial: 'optuna.trial.Trial',
     hyper_params = RECOGNITION_HYPER_PARAMS.copy()
     hyper_params['epochs'] = epochs
     hyper_params['cos_t_max'] = epochs
-    hyper_params['batch_size'] = 32
-    hyper_params['accumulate_grad_batches'] = 8
+    hyper_params['batch_size'] = 40
+    hyper_params['augment'] = trial.suggest_categorical('augment', [True, False])
+
+    hyper_params['accumulate_grad_batches'] = trial.suggest_int('accumulate_grad_batches', 1, 8, step=2)
+    hyper_params['label_smoothing'] = trial.suggest_loguniform('label_smoothing', 1e-2, 0.2)
+    hyper_params['decoder_attn_dropout'] = trial.suggest_categorical('decoder_attn_dropout', [0.0, 0.1, 0.2])
 
     hyper_params['warmup'] = trial.suggest_int('warmup', 50, 500, log=True)
     hyper_params['lr'] = trial.suggest_loguniform('lr', 1e-8, 1e-3)
     hyper_params['cos_min_lr'] = hyper_params['lr']/10
-    hyper_params['weight_decay'] = trial.suggest_loguniform('weight_decay', 1e-6, 1e-3)
+    hyper_params['weight_decay'] = trial.suggest_loguniform('weight_decay', 1e-6, 1e-2)
 
     data_module = TextLineDataModule(training_data=training_data,
                                      evaluation_data=evaluation_data,
