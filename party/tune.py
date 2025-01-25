@@ -32,6 +32,8 @@ def train_model(trial: 'optuna.trial.Trial',
     hyper_params['epochs'] = epochs
     hyper_params['cos_t_max'] = epochs
     hyper_params['optimizer'] = 'AdamW8bit'
+    hyper_params['freeze_encoder'] = True
+
     hyper_params['batch_size'] = 40
     hyper_params['augment'] = trial.suggest_categorical('augment', [True, False])
 
