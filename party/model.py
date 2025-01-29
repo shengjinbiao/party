@@ -245,7 +245,7 @@ def _configure_optimizer_and_lr_scheduler(hparams, model, loss_tracking_mode='mi
     layer_lr_decay = hparams.get('layer_lr_decay')
 
     if layer_lr_decay:
-        param_groups = group_layers(model)
+        param_groups = group_layers(model, weight_decay=weight_decay)
     else:
         param_groups = filter(lambda p: p.requires_grad, model)
 
