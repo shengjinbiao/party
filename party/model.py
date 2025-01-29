@@ -22,6 +22,7 @@ import logging
 import lightning.pytorch as L
 
 from torch import nn
+from itertools import chain
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.optim import lr_scheduler
 from torchmetrics.aggregation import MeanMetric
@@ -54,6 +55,7 @@ class RecognitionModel(L.LightningModule):
                  cos_t_max: float = 30,
                  cos_min_lr: float = 1e-4,
                  warmup: int = 15000,
+                 layer_lr_decay: float = 0.0,
                  encoder: str = 'swin_base_patch4_window12_384.ms_in22k',
                  encoder_input_size: Tuple[int, int] = (2560, 1920),
                  decoder: str = 'mittagessen/bytellama_oscar',
@@ -180,8 +182,8 @@ class RecognitionModel(L.LightningModule):
     def configure_callbacks(self):
         callbacks = []
         if self.hparams.quit == 'early':
-            callbacks.append(EarlyStopping(monitor='val_accuracy',
-                                           mode='max',
+            callbacks.append(EarlyStopping(monitor='val_metric',
+                                           mode='min',
                                            patience=self.hparams.lag,
                                            stopping_threshold=1.0))
 
@@ -195,7 +197,7 @@ class RecognitionModel(L.LightningModule):
     # scheduler are then only performed at the end of the epoch.
     def configure_optimizers(self):
         return _configure_optimizer_and_lr_scheduler(self.hparams,
-                                                     filter(lambda p: p.requires_grad, self.model.parameters()),
+                                                     self.model,
                                                      loss_tracking_mode='min')
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
@@ -207,6 +209,8 @@ class RecognitionModel(L.LightningModule):
         if self.hparams.warmup and self.trainer.global_step < self.hparams.warmup:
             lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.hparams.warmup)
             for pg in optimizer.param_groups:
+                if 'lr_scale' in pg:
+                    lr_scale = pg['lr_scale'] * lr_scale
                 if self.hparams.optimizer not in ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
                     pg['lr'] = lr_scale * self.hparams.lr
                 else:
@@ -225,7 +229,7 @@ class RecognitionModel(L.LightningModule):
                     scheduler.step(metric)
 
 
-def _configure_optimizer_and_lr_scheduler(hparams, params, loss_tracking_mode='min'):
+def _configure_optimizer_and_lr_scheduler(hparams, model, loss_tracking_mode='min'):
     optimizer = hparams.get("optimizer")
     lr = hparams.get("lr")
     momentum = hparams.get("momentum")
@@ -238,19 +242,25 @@ def _configure_optimizer_and_lr_scheduler(hparams, params, loss_tracking_mode='m
     rop_factor = hparams.get("rop_factor")
     rop_patience = hparams.get("rop_patience")
     completed_epochs = hparams.get("completed_epochs")
+    layer_lr_decay = hparams.get('layer_lr_decay')
+
+    if layer_lr_decay:
+        param_groups = group_layers(model)
+    else:
+        param_groups = filter(lambda p: p.requires_grad, model)
 
     # XXX: Warmup is not configured here because it needs to be manually done in optimizer_step()
     logger.debug(f'Constructing {optimizer} optimizer (lr: {lr}, momentum: {momentum})')
     if optimizer in ['Adam', 'AdamW']:
-        optim = getattr(torch.optim, optimizer)(params, lr=lr, weight_decay=weight_decay)
+        optim = getattr(torch.optim, optimizer)(param_groups, lr=lr, weight_decay=weight_decay)
     elif optimizer in ['Adam8bit', 'Adam4bit', 'AdamW8bit', 'AdamW4bit', 'AdamWFp8']:
         import torchao.prototype.low_bit_optim
-        optim = getattr(torchao.prototype.low_bit_optim, optimizer)(params, lr=lr, weight_decay=weight_decay)
+        optim = getattr(torchao.prototype.low_bit_optim, optimizer)(param_groups, lr=lr, weight_decay=weight_decay)
     elif optimizer == 'Mars':
         from timm.optim import Mars
-        optim = Mars(params, lr=lr, weight_decay=weight_decay, caution=True)
+        optim = Mars(param_groups, lr=lr, weight_decay=weight_decay, caution=True)
     else:
-        optim = getattr(torch.optim, optimizer)(params,
+        optim = getattr(torch.optim, optimizer)(param_groups,
                                                 lr=lr,
                                                 momentum=momentum,
                                                 weight_decay=weight_decay)
@@ -286,3 +296,19 @@ def _configure_optimizer_and_lr_scheduler(hparams, params, loss_tracking_mode='m
         lr_sched['reduce_on_plateau'] = True
 
     return ret
+
+
+def group_layers(model,
+                 layer_decay: float = 0.9,
+                 weight_decay: float = 0.05):
+    layers = list(chain(model.encoder.layers, model.adapter, model.decoder.layers))
+    num_layers = len(layers)
+    layer_scales = list(layer_decay ** (num_layers - i - 1) for i in range(num_layers))
+    pgs = []
+    for scale, layer in zip(layer_scales, layers):
+        # filter out non-trainable parameters
+        if (params := list(filter(lambda p: p.requires_grad, layer.parameters()))):
+            pgs.append({'params': params,
+                        'lr_scale': scale,
+                        'weight_decay': weight_decay})
+    return pgs
