@@ -24,7 +24,7 @@ from torch import nn
 from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
                            TransformerCrossAttentionLayer, TransformerDecoder,
                            FeedForward, TransformerSelfAttentionLayer,
-                           FusionLayer, TiedLinear, scale_hidden_dim_for_mlp,
+                           FusionLayer, scale_hidden_dim_for_mlp,
                            Llama3ScaledRoPE, llama3_mlp, PromptEncoder)
 
 from party.tokenizer import OctetTokenizer
@@ -167,7 +167,7 @@ def bytellama_vision_decoder(vocab_size: int = 259,
             layers.append(decoder_layer)
 
     tok_embeddings = nn.Embedding(config['vocab_size'], config['embed_dim'])
-    output_proj = TiedLinear(tok_embeddings)
+    output_proj = nn.Linear(config['embed_dim'], config['vocab_size'], bias=False)
 
     decoder = TransformerDecoder(tok_embeddings=tok_embeddings,
                                  layers=layers,
