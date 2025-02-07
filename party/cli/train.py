@@ -111,6 +111,7 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 @click.pass_context
 @click.option('--load-from-checkpoint', default=None, type=click.Path(exists=True), help='Path to checkpoint to load')
 @click.option('--load-from-repo', default=None, help='Identifier of model on huggingface hub, .e.g `10.5281/zenodo.14616981`')
+@click.option('--train-from-scratch', is_flag=True, show_default=True, default=False, help='Train model from scratch')
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='batch sample size')
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='model', help='Output model file')
@@ -228,7 +229,7 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'],
               help='Number of batches to accumulate gradient across.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
-def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
+def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_size, output, freq,
           quit, epochs, min_epochs, freeze_encoder, lag, min_delta, optimizer,
           lrate, momentum, weight_decay, label_smoothing, decoder_attn_dropout,
           gradient_clip_val, warmup, llr_decay, schedule, gamma, step_size,
@@ -344,7 +345,10 @@ def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
                       **val_check_interval)
 
     with trainer.init_module():
-        if load_from_checkpoint:
+        if train_from_scratch:
+            message('Initializing new model.')
+            model = RecognitionModel(**hyper_params)
+        elif load_from_checkpoint:
             message(f'Loading from checkpoint {load_from_checkpoint}.')
             model = RecognitionModel.load_from_checkpoint(load_from_checkpoint,
                                                           **hyper_params)
@@ -352,9 +356,6 @@ def train(ctx, load_from_checkpoint, load_from_repo, batch_size, output, freq,
             message(f'Loading from huggingface hub {load_from_repo}.')
             model = RecognitionModel.load_from_repo(load_from_repo,
                                                     **hyper_params)
-        else:
-            message('Initializing new model.')
-            model = RecognitionModel(**hyper_params)
 
     with threadpool_limits(limits=threads):
         trainer.validate(model, data_module)
