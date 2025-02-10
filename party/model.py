@@ -247,7 +247,7 @@ def _configure_optimizer_and_lr_scheduler(hparams, model, loss_tracking_mode='mi
     if layer_lr_decay:
         param_groups = group_layers(model, weight_decay=weight_decay)
     else:
-        param_groups = filter(lambda p: p.requires_grad, model)
+        param_groups = filter(lambda p: p.requires_grad, model.parameters())
 
     # XXX: Warmup is not configured here because it needs to be manually done in optimizer_step()
     logger.debug(f'Constructing {optimizer} optimizer (lr: {lr}, momentum: {momentum})')
