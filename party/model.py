@@ -139,11 +139,17 @@ class RecognitionModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         if batch['curves'] is not None:
-            for gt, pred in zip(batch['target'], validation_pred(batch['image'], lines=batch['curves'], prompt_mode='curves')):
+            for gt, pred in zip(batch['target'], validation_pred(self.model,
+                                                                 batch['image'],
+                                                                 lines=batch['curves'],
+                                                                 prompt_mode='curves')):
                 self.val_cer.update(pred, gt)
                 self.val_wer.update(pred, gt)
         if batch['boxes'] is not None:
-            for gt, pred in zip(batch['target'], validation_pred(batch['image'], lines=batch['boxes'], prompt_mode='boxes')):
+            for gt, pred in zip(batch['target'], validation_pred(self.model,
+                                                                 batch['image'],
+                                                                 lines=batch['boxes'],
+                                                                 prompt_mode='boxes')):
                 self.val_cer.update(pred, gt)
                 self.val_wer.update(pred, gt)
 
