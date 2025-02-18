@@ -268,10 +268,9 @@ class TextLineDataModule(L.LightningDataModule):
                                                im_transforms=self.im_transforms,
                                                augmentation=self.hparams.augmentation,
                                                batch_size=self.hparams.batch_size)
-        self.val_set = BinnedBaselineDataset(self.hparams.evaluation_data,
-                                             im_transforms=self.im_transforms,
-                                             augmentation=self.hparams.augmentation,
-                                             batch_size=self.hparams.batch_size)
+        self.val_set = ValidationBaselineDataset(self.hparams.evaluation_data,
+                                                 im_transforms=self.im_transforms,
+                                                 augmentation=self.hparams.augmentation)
         self.train_set.max_seq_len = max(self.train_set.max_seq_len, self.val_set.max_seq_len)
         self.val_set.max_seq_len = self.train_set.max_seq_len
 
@@ -383,6 +382,97 @@ class BinnedBaselineDataset(Dataset):
 
     def __len__(self) -> int:
         return self._len // self.batch_size
+
+
+class ValidationBaselineDataset(Dataset):
+    """
+    Dataset for validation.
+
+    Images are binned, all lines of a page are returned for each index
+
+    Args:
+        im_transforms: Function taking an PIL.Image and returning a tensor
+                       suitable for forward passes.
+        prompt_mode: Select line prompt sampling mode: `boxes` for bbox-only,
+                     `curves` for curves-only, and `both` for randomly
+                     switching between the two.
+        augmentation: Enables augmentation.
+    """
+    def __init__(self,
+                 files: Sequence[Union[str, 'PathLike']],
+                 im_transforms: Callable[[Any], torch.Tensor] = None,
+                 prompt_mode: Literal['boxes', 'curves', 'both'] = 'both',
+                 augmentation: bool = False,
+                 batch_size: int = 32) -> None:
+        super().__init__()
+        self.files = files
+        self.transforms = im_transforms
+        self.prompt_mode = prompt_mode
+        self.aug = None
+        self.batch_size = batch_size
+        self.max_seq_len = 0
+
+        self.arrow_table = None
+
+        for file in files:
+            with pa.memory_map(file, 'rb') as source:
+                ds_table = pa.ipc.open_file(source).read_all()
+                raw_metadata = ds_table.schema.metadata
+                if not raw_metadata or b'num_lines' not in raw_metadata:
+                    raise ValueError(f'{file} does not contain a valid metadata record.')
+                if not self.arrow_table:
+                    self.arrow_table = ds_table
+                else:
+                    self.arrow_table = pa.concat_tables([self.arrow_table, ds_table])
+                self.max_seq_len = max(int.from_bytes(raw_metadata[b'max_octets_in_line'], 'little'), self.max_seq_len)
+
+        if augmentation:
+            from party.augmentation import DefaultAugmenter
+            self.aug = DefaultAugmenter()
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # just sample from a random page
+
+        item = self.arrow_table.column('pages')[index].as_py()
+        logger.debug(f'Attempting to load {item["im"]}')
+        im, page_data = item['im'], item['lines']
+        try:
+            im = Image.open(io.BytesIO(im)).convert('RGB')
+        except Exception:
+            return self[0]
+
+        im = self.transforms(im)
+        if self.aug:
+            im = im.permute((1, 2, 0)).numpy()
+            o = self.aug(image=im)
+            im = torch.tensor(o['image'].transpose(2, 0, 1))
+
+        if self.prompt_mode == 'both':
+            return_boxes = True
+            return_curves = True
+        elif self.prompt_mode == 'boxes':
+            return_boxes = True
+            return_curves = False
+        else:
+            return_boxes = False
+            return_curves = True
+
+        curves = []
+        boxes = []
+        target = []
+        for line in page_data:
+            if return_curves:
+                curves.append(torch.tensor(line['curve']).view(4, 2))
+            if return_boxes:
+                boxes.append(torch.tensor(line['bbox']).view(4, 2))
+            target.append(line['text'])
+        return {'image': im.unsqueeze(0),
+                'boxes': boxes if len(boxes) else None,
+                'curves': curves if len(curves) else None,
+                'target': target}
+
+    def __len__(self) -> int:
+        return len(self.arrow_table)
 
 
 # magic lsq cubic bezier fit function from the internet.
