@@ -42,7 +42,7 @@ class TransformerSelfAttentionLayer(nn.Module):
         self.sa_scale = sa_scale or nn.Identity()
         self.mlp_scale = mlp_scale or nn.Identity()
 
-    def delete_caches():
+    def delete_caches(self):
         """
         Delete any cache.
         """
@@ -177,7 +177,7 @@ class TransformerCrossAttentionLayer(nn.Module):
         self.ca_scale = ca_scale or nn.Identity()
         self.mlp_scale = mlp_scale or nn.Identity()
 
-    def delete_caches():
+    def delete_caches(self):
         """
         Delete any cache.
         """
@@ -409,7 +409,7 @@ class TransformerDecoder(nn.Module):
         This should be called before the first forward pass, in the recipe."""
         self.num_output_chunks = num_output_chunks
 
-    def delete_caches():
+    def delete_caches(self):
         """
         Delete any cache.
         """
