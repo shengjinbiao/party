@@ -132,6 +132,7 @@ class RecognitionModel(L.LightningModule):
                  loss,
                  batch_size=batch['tokens'].shape[0],
                  on_step=True,
+                 on_epoch=True,
                  prog_bar=True,
                  logger=True)
         return loss
