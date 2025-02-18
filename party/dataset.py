@@ -467,8 +467,8 @@ class ValidationBaselineDataset(Dataset):
                 boxes.append(torch.tensor(line['bbox']).view(4, 2))
             target.append(line['text'])
         return {'image': im.unsqueeze(0),
-                'boxes': boxes if len(boxes) else None,
-                'curves': curves if len(curves) else None,
+                'boxes': torch.stack(boxes) if len(boxes) else None,
+                'curves': torch.stack(curves) if len(curves) else None,
                 'target': target}
 
     def __len__(self) -> int:

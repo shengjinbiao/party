@@ -25,10 +25,12 @@ from torch import nn
 from itertools import chain
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.optim import lr_scheduler
-from torchmetrics.aggregation import MeanMetric
 
 from typing import Literal, Tuple
 
+from torchmetrics.text import CharErrorRate, WordErrorRate
+
+from party.pred import validation_pred
 from party.fusion import bytellama_vision_decoder, PartyModel
 
 logger = logging.getLogger(__name__)
@@ -101,7 +103,8 @@ class RecognitionModel(L.LightningModule):
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-        self.val_mean = MeanMetric()
+        self.val_cer = CharErrorRate()
+        self.val_wer = WordErrorRate()
 
     def forward(self, x, curves):
         return self.model(encoder_input=x,
@@ -134,31 +137,25 @@ class RecognitionModel(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        tokens = batch['tokens']
-        # shift the tokens to create targets
-        ignore_idxs = torch.full((tokens.shape[0], 1),
-                                 self.criterion.ignore_index,
-                                 dtype=tokens.dtype, device=tokens.device)
-        targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
-
-        # our tokens already contain BOS/EOS tokens so we just run it
-        # through the model after replacing ignored indices.
-        tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
-        logits = self.model(tokens=tokens,
-                            encoder_input=batch['image'],
-                            encoder_curves=batch['curves'],
-                            encoder_boxes=batch['boxes'])
-
-        logits = logits.reshape(-1, logits.shape[-1])
-        loss = nn.CrossEntropyLoss()(logits, targets)
-        self.val_mean.update(loss)
-        return loss
+        if batch['curves'] is not None:
+            for gt, pred in zip(batch['target'], validation_pred(batch['image'], lines=batch['curves'], prompt_mode='curves')):
+                self.val_cer.update(pred, gt)
+                self.val_wer.update(pred, gt)
+        if batch['boxes'] is not None:
+            for gt, pred in zip(batch['target'], validation_pred(batch['image'], lines=batch['boxes'], prompt_mode='boxes')):
+                self.val_cer.update(pred, gt)
+                self.val_wer.update(pred, gt)
 
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
-            self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+            cer = self.val_cer.compute()
+            wer = self.val_wer.compute()
+            self.log('val_cer', cer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+            self.log('val_metric', cer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+            self.log('val_wer', wer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
-        self.val_mean.reset()
+        self.val_cer.reset()
+        self.val_wer.reset()
 
     def save_checkpoint(self, filename):
         self.trainer.save_checkpoint(filename)

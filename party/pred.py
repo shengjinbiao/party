@@ -168,3 +168,54 @@ class batched_pred(object):
 
     def __len__(self):
         return self.len
+
+
+class validation_pred(object):
+    """
+    Predictor for validation run
+
+    Args:
+        model: PartyModel for generation.
+        im: transformed image tensor of shape (1, 3, H, W)
+        lines: line prompts
+        prompt_mode: How to embed line positional prompts. Per default prompts
+                     are determined by the segmentation type if the model
+                     indicates either curves or boxes are supported. If the
+                     model supports only boxes and the input segmentation is
+                     baseline-type, bounding boxes will be generated from the
+                     bounding polygon if available. If the model expects curves
+                     and the segmentation is of bounding box-type an exception
+                     will be raised. If explicit values are set.
+        batch_size: Number of lines to predict in parallel
+
+    Yields:
+        An ocr_record containing the recognized text, dummy character
+        positions, and confidence values for each character.
+
+    Raises:
+        ValueError when the model expects curves and the segmentation of bounding box-type.
+    """
+    def __init__(self,
+                 model: 'PartyModel',
+                 im: 'torch.Tensor',
+                 lines: 'torch.Tensor',
+                 prompt_mode: Optional[Literal['curves', 'boxes']] = 'curves',
+                 batch_size: int = 2) -> Generator['ocr_record', None, None]:
+        m_device = next(model.parameters()).device
+
+        # prepare model for generation
+        model.prepare_for_generation(batch_size=batch_size, device=m_device)
+        self.len = len(lines)
+
+        self._pred = model.predict_string(encoder_input=im,
+                                          curves=lines if prompt_mode == 'curves' else None,
+                                          boxes=lines if prompt_mode == 'boxes' else None)
+
+    def __next__(self):
+        return next(self._pred)
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.len
