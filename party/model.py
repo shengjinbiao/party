@@ -163,6 +163,7 @@ class RecognitionModel(L.LightningModule):
             self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
         self.val_cer.reset()
         self.val_wer.reset()
+        self.model.delete_caches()
 
     def save_checkpoint(self, filename):
         self.trainer.save_checkpoint(filename)

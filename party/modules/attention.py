@@ -164,6 +164,13 @@ class MultiHeadAttention(nn.Module):
         # perform normal forward passes
         self.cache_enabled = False
 
+    def delete_cache(self):
+        """
+        Deletes any cache.
+        """
+        self.kv_cache = None
+        self.cache_enabled = False
+
     def setup_cache(
         self, batch_size: int, dtype: torch.dtype, max_seq_len: int
     ) -> None:

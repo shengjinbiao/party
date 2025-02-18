@@ -364,6 +364,12 @@ class PartyModel(nn.Module):
                                   encoder_max_seq_len=encoder_max_seq_len,
                                   decoder_max_seq_len=decoder_max_seq_len)
 
+    def delete_caches(self):
+        """
+        Remove caches from model.
+        """
+        self.decoder.delete_caches()
+
     def caches_are_setup(self) -> bool:
         """
         Check if the key value caches are setup. This means ``setup_caches`` has been called, and
