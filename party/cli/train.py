@@ -341,7 +341,6 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
                       accumulate_grad_batches=hyper_params['accumulate_grad_batches'],
                       callbacks=cbs,
                       gradient_clip_val=hyper_params['gradient_clip_val'],
-                      use_distributed_sampler=False,
                       **val_check_interval)
 
     with trainer.init_module():
