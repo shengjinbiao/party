@@ -190,6 +190,7 @@ class MultiHeadAttention(nn.Module):
             head_dim=self.head_dim,
             dtype=dtype,
         )
+        self.kv_cache.to(next(self.q_proj.parameters()).device)
         self.cache_enabled = True
 
     def reset_cache(self):
