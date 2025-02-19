@@ -324,7 +324,7 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
                                           monitor='global_step',
                                           mode='max',
                                           auto_insert_metric_name=False,
-                                          filename='checkpoint_{epoch:02d}-{val_metric:.4f}')
+                                          filename='checkpoint_{epoch:02d}-{val_cer:.4f}')
 
     cbs.append(checkpoint_callback)
     if not ctx.meta['verbose']:

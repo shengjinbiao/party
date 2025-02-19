@@ -158,7 +158,6 @@ class RecognitionModel(L.LightningModule):
             cer = self.val_cer.compute()
             wer = self.val_wer.compute()
             self.log('val_cer', cer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-            self.log('val_metric', cer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log('val_wer', wer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
         self.val_cer.reset()
@@ -187,7 +186,7 @@ class RecognitionModel(L.LightningModule):
     def configure_callbacks(self):
         callbacks = []
         if self.hparams.quit == 'early':
-            callbacks.append(EarlyStopping(monitor='val_metric',
+            callbacks.append(EarlyStopping(monitor='val_cer',
                                            mode='min',
                                            patience=self.hparams.lag,
                                            stopping_threshold=1.0))
