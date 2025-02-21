@@ -30,7 +30,6 @@ from typing import Literal, Tuple
 
 from torchmetrics.aggregation import MeanMetric
 
-from party.pred import validation_pred
 from party.fusion import bytellama_vision_decoder, PartyModel
 
 logger = logging.getLogger(__name__)
@@ -147,25 +146,28 @@ class RecognitionModel(L.LightningModule):
         # our tokens already contain BOS/EOS tokens so we just run it
         # through the model after replacing ignored indices.
         tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
-        if batch['curves'] is not None:
-            logits = self.model(tokens=tokens,
-                                encoder_input=batch['image'],
-                                encoder_curves=batch['curves'],
-                                encoder_boxes=None)
 
-            logits = logits.reshape(-1, logits.shape[-1])
-            loss = nn.CrossEntropyLoss()(logits, targets)
-            self.val_mean.update(loss)
+        if batch['curves'] is not None:
+            for batch_tokens, batch_targets, batch_curves in zip(tokens.split(32), targets.split(32), batch['curves'].split(32)):
+                logits = self.model(tokens=tokens,
+                                    encoder_input=batch['image'],
+                                    encoder_curves=batch['curves'],
+                                    encoder_boxes=None)
+
+                logits = logits.reshape(-1, logits.shape[-1])
+                loss = nn.CrossEntropyLoss()(logits, targets)
+                self.val_mean.update(loss)
 
         if batch['boxes'] is not None:
-            logits = self.model(tokens=tokens,
-                                encoder_input=batch['image'],
-                                encoder_curves=None,
-                                encoder_boxes=batch['boxes'])
+            for batch_tokens, batch_targets, batch_boxes in zip(tokens.split(32), targets.split(32), batch['boxes'].split(32)):
+                logits = self.model(tokens=tokens,
+                                    encoder_input=batch['image'],
+                                    encoder_curves=None,
+                                    encoder_boxes=batch['boxes'])
 
-            logits = logits.reshape(-1, logits.shape[-1])
-            loss = nn.CrossEntropyLoss()(logits, targets)
-            self.val_mean.update(loss)
+                logits = logits.reshape(-1, logits.shape[-1])
+                loss = nn.CrossEntropyLoss()(logits, targets)
+                self.val_mean.update(loss)
         return loss
 
     def on_validation_epoch_end(self):
