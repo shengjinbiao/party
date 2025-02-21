@@ -485,7 +485,7 @@ class ValidationBaselineDataset(IterableDataset):
             curves = torch.stack(curves) if len(curves) else None
             for batch_tokens, batch_boxes, batch_curves in zip_longest(tokens.split(32),
                                                                        boxes.split(self.batch_size) if boxes is not None else None,
-                                                                       curves.split(self.batc_size) if curves is not None else None):
+                                                                       curves.split(self.batch_size) if curves is not None else None):
                 yield {'image': im.unsqueeze(0),
                        'boxes': batch_boxes,
                        'curves': batch_curves,
