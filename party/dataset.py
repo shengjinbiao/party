@@ -412,6 +412,8 @@ class ValidationBaselineDataset(Dataset):
         self.batch_size = batch_size
         self.max_seq_len = 0
 
+        self.tokenizer = OctetTokenizer()
+
         self.arrow_table = None
 
         for file in files:
