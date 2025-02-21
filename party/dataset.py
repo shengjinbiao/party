@@ -24,7 +24,7 @@ import lightning.pytorch as L
 import tempfile
 import pyarrow as pa
 
-from itertools import zip_longest
+from itertools import islice
 
 from torch.distributed import get_rank, get_world_size, is_initialized
 
@@ -57,6 +57,17 @@ except ImportError:
     logger.info('No JPEG-XL plugin found')
 
 Image.MAX_IMAGE_PIXELS = 20000 ** 2
+
+
+def batched(iterable, n, *, strict=False):
+    # batched('ABCDEFG', 3) → ABC DEF G
+    if n < 1:
+        raise ValueError('n must be at least one')
+    iterator = iter(iterable)
+    while batch := tuple(islice(iterator, n)):
+        if strict and len(batch) != n:
+            raise ValueError('batched(): incomplete batch')
+        yield batch
 
 
 def get_default_transforms(dtype=torch.float32):
@@ -449,16 +460,14 @@ class ValidationBaselineDataset(IterableDataset):
             item = item.as_py()
             logger.debug(f'Attempting to load {item["im"]}')
             im, page_data = item['im'], item['lines']
-            try:
-                im = Image.open(io.BytesIO(im)).convert('RGB')
-            except Exception:
-                return self[0]
-
+            im = Image.open(io.BytesIO(im)).convert('RGB')
             im = self.transforms(im)
             if self.aug:
                 im = im.permute((1, 2, 0)).numpy()
                 o = self.aug(image=im)
                 im = torch.tensor(o['image'].transpose(2, 0, 1))
+
+            im = im.unsqueeze(0)
 
             if self.prompt_mode == 'both':
                 return_boxes = True
@@ -470,26 +479,24 @@ class ValidationBaselineDataset(IterableDataset):
                 return_boxes = False
                 return_curves = True
 
-            curves = []
-            boxes = []
-            tokens = []
-            for line in page_data:
-                if return_curves:
-                    curves.append(torch.tensor(line['curve']).view(4, 2))
-                if return_boxes:
-                    boxes.append(torch.tensor(line['bbox']).view(4, 2))
-                tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
+            for lines in batched(page_data, self.batch_size):
+                curves = []
+                boxes = []
+                tokens = []
+                for line in lines:
+                    if return_curves:
+                        curves.append(torch.tensor(line['curve']).view(4, 2))
+                    if return_boxes:
+                        boxes.append(torch.tensor(line['bbox']).view(4, 2))
+                    tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
 
-            tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
-            boxes = torch.stack(boxes) if len(boxes) else None
-            curves = torch.stack(curves) if len(curves) else None
-            for batch_tokens, batch_boxes, batch_curves in zip_longest(tokens.split(32),
-                                                                       boxes.split(self.batch_size) if boxes is not None else None,
-                                                                       curves.split(self.batch_size) if curves is not None else None):
-                yield {'image': im.unsqueeze(0),
-                       'boxes': batch_boxes,
-                       'curves': batch_curves,
-                       'tokens': batch_tokens}
+                tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
+                boxes = torch.stack(boxes) if len(boxes) else None
+                curves = torch.stack(curves) if len(curves) else None
+                yield {'image': im,
+                       'boxes': boxes,
+                       'curves': curves,
+                       'tokens': tokens}
 
 
 # magic lsq cubic bezier fit function from the internet.
