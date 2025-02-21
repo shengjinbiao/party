@@ -28,7 +28,7 @@ from torch.optim import lr_scheduler
 
 from typing import Literal, Tuple
 
-from torchmetrics.text import CharErrorRate, WordErrorRate
+from torchmetrics.aggregation import MeanMetric
 
 from party.pred import validation_pred
 from party.fusion import bytellama_vision_decoder, PartyModel
@@ -103,8 +103,7 @@ class RecognitionModel(L.LightningModule):
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-        self.val_cer = CharErrorRate()
-        self.val_wer = WordErrorRate()
+        self.val_mean = MeanMetric()
 
     def forward(self, x, curves):
         return self.model(encoder_input=x,
@@ -138,33 +137,42 @@ class RecognitionModel(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        tokens = batch['tokens']
+        # shift the tokens to create targets
+        ignore_idxs = torch.full((tokens.shape[0], 1),
+                                 self.criterion.ignore_index,
+                                 dtype=tokens.dtype, device=tokens.device)
+        targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
+
+        # our tokens already contain BOS/EOS tokens so we just run it
+        # through the model after replacing ignored indices.
+        tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
         if batch['curves'] is not None:
-            for gt, pred in zip(batch['target'], validation_pred(self.model,
-                                                                 batch['image'],
-                                                                 lines=batch['curves'],
-                                                                 prompt_mode='curves',
-                                                                 batch_size=64)):
-                self.val_cer.update(pred, gt)
-                self.val_wer.update(pred, gt)
+            logits = self.model(tokens=tokens,
+                                encoder_input=batch['image'],
+                                encoder_curves=batch['curves'],
+                                encoder_boxes=None)
+
+            logits = logits.reshape(-1, logits.shape[-1])
+            loss = nn.CrossEntropyLoss()(logits, targets)
+            self.val_mean.update(loss)
+
         if batch['boxes'] is not None:
-            for gt, pred in zip(batch['target'], validation_pred(self.model,
-                                                                 batch['image'],
-                                                                 lines=batch['boxes'],
-                                                                 prompt_mode='boxes',
-                                                                 batch_size=64)):
-                self.val_cer.update(pred, gt)
-                self.val_wer.update(pred, gt)
+            logits = self.model(tokens=tokens,
+                                encoder_input=batch['image'],
+                                encoder_curves=None,
+                                encoder_boxes=batch['boxes'])
+
+            logits = logits.reshape(-1, logits.shape[-1])
+            loss = nn.CrossEntropyLoss()(logits, targets)
+            self.val_mean.update(loss)
+        return loss
 
     def on_validation_epoch_end(self):
         if not self.trainer.sanity_checking:
-            cer = self.val_cer.compute()
-            wer = self.val_wer.compute()
-            self.log('val_cer', cer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-            self.log('val_wer', wer, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+            self.log('val_metric', self.val_mean.compute(), on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log('global_step', self.global_step, on_step=False, on_epoch=True, prog_bar=False, logger=True, sync_dist=True)
-        self.val_cer.reset()
-        self.val_wer.reset()
-        self.model.delete_caches()
+        self.val_mean.reset()
 
     def save_checkpoint(self, filename):
         self.trainer.save_checkpoint(filename)
@@ -188,7 +196,7 @@ class RecognitionModel(L.LightningModule):
     def configure_callbacks(self):
         callbacks = []
         if self.hparams.quit == 'early':
-            callbacks.append(EarlyStopping(monitor='val_cer',
+            callbacks.append(EarlyStopping(monitor='val_metric',
                                            mode='min',
                                            patience=self.hparams.lag,
                                            stopping_threshold=1.0))
