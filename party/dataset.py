@@ -469,10 +469,12 @@ class ValidationBaselineDataset(Dataset):
                 boxes.append(torch.tensor(line['bbox']).view(4, 2))
             tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
 
+        tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
+
         return {'image': im.unsqueeze(0),
                 'boxes': torch.stack(boxes) if len(boxes) else None,
                 'curves': torch.stack(curves) if len(curves) else None,
-                'tokens': torch.stack(tokens)}
+                'tokens': tokens}
 
     def __len__(self) -> int:
         return len(self.arrow_table)
