@@ -149,10 +149,10 @@ class RecognitionModel(L.LightningModule):
 
         if batch['curves'] is not None:
             for batch_tokens, batch_targets, batch_curves in zip(tokens.split(32), targets.split(32), batch['curves'].split(32)):
-                logits = self.model(tokens=tokens,
-                                    encoder_input=batch['image'],
-                                    encoder_curves=batch['curves'],
-                                    encoder_boxes=None)
+                logits = self.model._orig_mod(tokens=tokens,
+                                              encoder_input=batch['image'],
+                                              encoder_curves=batch['curves'],
+                                              encoder_boxes=None)
 
                 logits = logits.reshape(-1, logits.shape[-1])
                 loss = nn.CrossEntropyLoss()(logits, targets)
@@ -160,10 +160,10 @@ class RecognitionModel(L.LightningModule):
 
         if batch['boxes'] is not None:
             for batch_tokens, batch_targets, batch_boxes in zip(tokens.split(32), targets.split(32), batch['boxes'].split(32)):
-                logits = self.model(tokens=tokens,
-                                    encoder_input=batch['image'],
-                                    encoder_curves=None,
-                                    encoder_boxes=batch['boxes'])
+                logits = self.model._orig_mod(tokens=tokens,
+                                              encoder_input=batch['image'],
+                                              encoder_curves=None,
+                                              encoder_boxes=batch['boxes'])
 
                 logits = logits.reshape(-1, logits.shape[-1])
                 loss = nn.CrossEntropyLoss()(logits, targets)
