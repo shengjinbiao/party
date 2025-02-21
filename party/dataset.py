@@ -24,12 +24,17 @@ import lightning.pytorch as L
 import tempfile
 import pyarrow as pa
 
+from itertools import zip_longest
+
+from torch.distributed import get_rank, get_world_size, is_initialized
+
 from typing import (TYPE_CHECKING, Any, Callable, List, Literal, Optional,
                     Tuple, Union, Sequence)
 
 from functools import partial
 from torchvision.transforms import v2
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, IterableDataset, get_worker_info
+
 
 from PIL import Image
 
@@ -384,11 +389,9 @@ class BinnedBaselineDataset(Dataset):
         return self._len // self.batch_size
 
 
-class ValidationBaselineDataset(Dataset):
+class ValidationBaselineDataset(IterableDataset):
     """
     Dataset for validation.
-
-    Images are binned, all lines of a page are returned for each index
 
     Args:
         im_transforms: Function taking an PIL.Image and returning a tensor
@@ -432,52 +435,61 @@ class ValidationBaselineDataset(Dataset):
             from party.augmentation import DefaultAugmenter
             self.aug = DefaultAugmenter()
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # just sample from a random page
+    def __iter__(self):
+        device_rank, world_size = (get_rank(), get_world_size()) if is_initialized() else (0, 1)
 
-        item = self.arrow_table.column('pages')[index].as_py()
-        logger.debug(f'Attempting to load {item["im"]}')
-        im, page_data = item['im'], item['lines']
-        try:
-            im = Image.open(io.BytesIO(im)).convert('RGB')
-        except Exception:
-            return self[0]
+        # workers split
+        worker_info = get_worker_info()
+        worker_rank, num_workers = (worker_info.id, worker_info.num_workers) if worker_info else (0, 1)
 
-        im = self.transforms(im)
-        if self.aug:
-            im = im.permute((1, 2, 0)).numpy()
-            o = self.aug(image=im)
-            im = torch.tensor(o['image'].transpose(2, 0, 1))
+        num_replicas = num_workers * world_size
+        replica_rank = worker_rank * world_size + device_rank
 
-        if self.prompt_mode == 'both':
-            return_boxes = True
-            return_curves = True
-        elif self.prompt_mode == 'boxes':
-            return_boxes = True
-            return_curves = False
-        else:
-            return_boxes = False
-            return_curves = True
+        for item in self.arrow_table.column('pages')[replica_rank::num_replicas]:
+            item = item.as_py()
+            logger.debug(f'Attempting to load {item["im"]}')
+            im, page_data = item['im'], item['lines']
+            try:
+                im = Image.open(io.BytesIO(im)).convert('RGB')
+            except Exception:
+                return self[0]
 
-        curves = []
-        boxes = []
-        tokens = []
-        for line in page_data:
-            if return_curves:
-                curves.append(torch.tensor(line['curve']).view(4, 2))
-            if return_boxes:
-                boxes.append(torch.tensor(line['bbox']).view(4, 2))
-            tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
+            im = self.transforms(im)
+            if self.aug:
+                im = im.permute((1, 2, 0)).numpy()
+                o = self.aug(image=im)
+                im = torch.tensor(o['image'].transpose(2, 0, 1))
 
-        tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
+            if self.prompt_mode == 'both':
+                return_boxes = True
+                return_curves = True
+            elif self.prompt_mode == 'boxes':
+                return_boxes = True
+                return_curves = False
+            else:
+                return_boxes = False
+                return_curves = True
 
-        return {'image': im.unsqueeze(0),
-                'boxes': torch.stack(boxes) if len(boxes) else None,
-                'curves': torch.stack(curves) if len(curves) else None,
-                'tokens': tokens}
+            curves = []
+            boxes = []
+            tokens = []
+            for line in page_data:
+                if return_curves:
+                    curves.append(torch.tensor(line['curve']).view(4, 2))
+                if return_boxes:
+                    boxes.append(torch.tensor(line['bbox']).view(4, 2))
+                tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
 
-    def __len__(self) -> int:
-        return len(self.arrow_table)
+            tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
+            boxes = torch.stack(boxes) if len(boxes) else None
+            curves = torch.stack(curves) if len(curves) else None
+            for batch_tokens, batch_boxes, batch_curves in zip_longest(tokens.split(32),
+                                                                       boxes.split(self.batch_size) if boxes is not None else None,
+                                                                       curves.split(self.batc_size) if curves is not None else None):
+                yield {'image': im.unsqueeze(0),
+                       'boxes': batch_boxes,
+                       'curves': batch_curves,
+                       'tokens': batch_tokens}
 
 
 # magic lsq cubic bezier fit function from the internet.
