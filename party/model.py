@@ -35,6 +35,26 @@ from party.fusion import bytellama_vision_decoder, PartyModel
 logger = logging.getLogger(__name__)
 
 
+def model_step(model, criterion, batch):
+    tokens = batch['tokens']
+    # shift the tokens to create targets
+    ignore_idxs = torch.full((tokens.shape[0], 1),
+                             criterion.ignore_index,
+                             dtype=tokens.dtype, device=tokens.device)
+    targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
+
+    # our tokens already contain BOS/EOS tokens so we just run it
+    # through the model after replacing ignored indices.
+    tokens.masked_fill_(tokens == criterion.ignore_index, 0)
+    logits = model(tokens=tokens,
+                   encoder_input=batch['image'],
+                   encoder_curves=batch['curves'],
+                   encoder_boxes=batch['boxes'])
+
+    logits = logits.reshape(-1, logits.shape[-1])
+    return criterion(logits, targets)
+
+
 class RecognitionModel(L.LightningModule):
     """
     A LightningModule encapsulating the training setup for a text
@@ -97,10 +117,10 @@ class RecognitionModel(L.LightningModule):
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
 
-        self.model = torch.compile(self.model)
         self.model.train()
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.model_step = torch.compile(model_step, backend="inductor", dynamic=False, fullgraph=True)
 
         self.val_mean = MeanMetric()
 
@@ -109,23 +129,7 @@ class RecognitionModel(L.LightningModule):
                           encoder_curves=curves)
 
     def training_step(self, batch, batch_idx):
-        tokens = batch['tokens']
-        # shift the tokens to create targets
-        ignore_idxs = torch.full((tokens.shape[0], 1),
-                                 self.criterion.ignore_index,
-                                 dtype=tokens.dtype, device=tokens.device)
-        targets = torch.hstack((tokens[..., 1:], ignore_idxs)).reshape(-1)
-
-        # our tokens already contain BOS/EOS tokens so we just run it
-        # through the model after replacing ignored indices.
-        tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
-        logits = self.model(tokens=tokens,
-                            encoder_input=batch['image'],
-                            encoder_curves=batch['curves'],
-                            encoder_boxes=batch['boxes'])
-
-        logits = logits.reshape(-1, logits.shape[-1])
-        loss = self.criterion(logits, targets)
+        loss = self.model_step(self.model, self.criterion, batch)
         self.log('train_loss',
                  loss,
                  batch_size=batch['tokens'].shape[0],
@@ -149,24 +153,24 @@ class RecognitionModel(L.LightningModule):
 
         if batch['curves'] is not None:
             for batch_tokens, batch_targets, batch_curves in zip(tokens.split(32), targets.split(32), batch['curves'].split(32)):
-                logits = self.model._orig_mod(tokens=tokens,
-                                              encoder_input=batch['image'],
-                                              encoder_curves=batch['curves'],
-                                              encoder_boxes=None)
+                logits = self.model(tokens=tokens,
+                                    encoder_input=batch['image'],
+                                    encoder_curves=batch['curves'],
+                                    encoder_boxes=None)
 
                 logits = logits.reshape(-1, logits.shape[-1])
-                loss = nn.CrossEntropyLoss()(logits, targets)
+                loss = nn.CrossEntropyLoss(reduction='none')(logits, targets)
                 self.val_mean.update(loss)
 
         if batch['boxes'] is not None:
             for batch_tokens, batch_targets, batch_boxes in zip(tokens.split(32), targets.split(32), batch['boxes'].split(32)):
-                logits = self.model._orig_mod(tokens=tokens,
-                                              encoder_input=batch['image'],
-                                              encoder_curves=None,
-                                              encoder_boxes=batch['boxes'])
+                logits = self.model(tokens=tokens,
+                                    encoder_input=batch['image'],
+                                    encoder_curves=None,
+                                    encoder_boxes=batch['boxes'])
 
                 logits = logits.reshape(-1, logits.shape[-1])
-                loss = nn.CrossEntropyLoss()(logits, targets)
+                loss = nn.CrossEntropyLoss(reduction='none')(logits, targets)
                 self.val_mean.update(loss)
         return loss
 
@@ -191,7 +195,6 @@ class RecognitionModel(L.LightningModule):
         model_path = get_model(id) / 'model.safetensors'
 
         module.model = PartyModel.from_safetensors(model_path)
-        module.model = torch.compile(module.model)
         module.model.train()
         return module
 
