@@ -120,7 +120,7 @@ class RecognitionModel(L.LightningModule):
         self.model.train()
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-        self.model_step = torch.compile(model_step, backend="inductor", dynamic=False, fullgraph=True)
+        self.model_step = torch.compile(model_step, backend="aot_eager", dynamic=False)
 
         self.val_mean = MeanMetric()
 
