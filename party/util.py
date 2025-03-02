@@ -55,7 +55,7 @@ def checkpoint_to_kraken(checkpoint_path: Union[str, 'PathLike'],
     if model_card:
         metadata['model_card'] = model_card
 
-    states = {k.removeprefix('model._orig_mod.'): v for k, v in state_dict['state_dict'].items()}
+    states = {k.removeprefix('model.'): v for k, v in state_dict['state_dict'].items()}
     # we can just save the state dict as our constructor sets up the tensor
     # sharing.
     save_file(states, filename, metadata=metadata)
