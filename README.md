@@ -92,7 +92,7 @@ Testing for now only works from XML files. As with for inference curve prompts a
 
 ## Performance
 
-Training and inference resource consumption is highly dependent on various optimizations being enabled. Torch compilation which is required for various attention optimizations is enabled per default but lower precision training which isn't supported on CPU needs to be configured manually with `party --precision bf16-true ...`.
+Training and inference resource consumption is highly dependent on various optimizations being enabled. Torch compilation which is required for various attention optimizations is enabled per default but lower precision training which isn't supported on CPU needs to be configured manually with `party --precision bf16-mixed ...`.
 
 Moderate speedups on CPU are possible with intra-op parallelism (`party --threads 4 ocr ...`).
 
