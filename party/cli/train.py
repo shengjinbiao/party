@@ -162,10 +162,6 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 @click.option('-m', '--momentum', show_default=True, default=RECOGNITION_HYPER_PARAMS['momentum'], help='Momentum')
 @click.option('-w', '--weight-decay', show_default=True, type=float,
               default=RECOGNITION_HYPER_PARAMS['weight_decay'], help='Weight decay')
-@click.option('--label-smoothing', show_default=True, type=click.FloatRange(0.0, 1.0),
-              default=RECOGNITION_HYPER_PARAMS['label_smoothing'], help='Label smoothing')
-@click.option('--decoder-attn-dropout', show_default=True, type=click.FloatRange(0.0, 1.0),
-              default=RECOGNITION_HYPER_PARAMS['decoder_attn_dropout'], help='decoder attention dropout')
 @click.option('--gradient-clip-val', show_default=True, default=RECOGNITION_HYPER_PARAMS['gradient_clip_val'], help='Gradient clip value')
 @click.option('--warmup', show_default=True, type=int,
               default=RECOGNITION_HYPER_PARAMS['warmup'], help='Number of steps to ramp up to `lrate` initial learning rate.')
@@ -229,11 +225,10 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_size, output, freq,
           quit, epochs, min_epochs, freeze_encoder, lag, min_delta, optimizer,
-          lrate, momentum, weight_decay, label_smoothing, decoder_attn_dropout,
-          gradient_clip_val, warmup, schedule, gamma, step_size,
-          sched_patience, cos_max, cos_min_lr, training_files,
-          evaluation_files, workers, threads, augment, prompt_mode,
-          accumulate_grad_batches, ground_truth):
+          lrate, momentum, weight_decay, gradient_clip_val, warmup, schedule,
+          gamma, step_size, sched_patience, cos_max, cos_min_lr,
+          training_files, evaluation_files, workers, threads, augment,
+          prompt_mode, accumulate_grad_batches, ground_truth):
     """
     Trains a model from image-text pairs.
     """
@@ -274,8 +269,6 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
                          'lr': lrate,
                          'momentum': momentum,
                          'weight_decay': weight_decay,
-                         'label_smoothing': label_smoothing,
-                         'decoder_attn_dropout': decoder_attn_dropout,
                          'warmup': warmup,
                          'schedule': schedule,
                          'gamma': gamma,
