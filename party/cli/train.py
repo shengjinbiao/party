@@ -169,8 +169,6 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 @click.option('--gradient-clip-val', show_default=True, default=RECOGNITION_HYPER_PARAMS['gradient_clip_val'], help='Gradient clip value')
 @click.option('--warmup', show_default=True, type=int,
               default=RECOGNITION_HYPER_PARAMS['warmup'], help='Number of steps to ramp up to `lrate` initial learning rate.')
-@click.option('--llr-decay', show_default=True, type=float,
-              default=RECOGNITION_HYPER_PARAMS['layer_lr_decay'], help='Factor to decay learning rate according to distance from last layer.')
 @click.option('--schedule',
               show_default=True,
               type=click.Choice(['constant',
@@ -232,7 +230,7 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_size, output, freq,
           quit, epochs, min_epochs, freeze_encoder, lag, min_delta, optimizer,
           lrate, momentum, weight_decay, label_smoothing, decoder_attn_dropout,
-          gradient_clip_val, warmup, llr_decay, schedule, gamma, step_size,
+          gradient_clip_val, warmup, schedule, gamma, step_size,
           sched_patience, cos_max, cos_min_lr, training_files,
           evaluation_files, workers, threads, augment, prompt_mode,
           accumulate_grad_batches, ground_truth):
@@ -279,7 +277,6 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
                          'label_smoothing': label_smoothing,
                          'decoder_attn_dropout': decoder_attn_dropout,
                          'warmup': warmup,
-                         'layer_lr_decay': llr_decay,
                          'schedule': schedule,
                          'gamma': gamma,
                          'step_size': step_size,

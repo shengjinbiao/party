@@ -22,7 +22,6 @@ import logging
 import lightning.pytorch as L
 
 from torch import nn
-from itertools import chain
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.optim import lr_scheduler
 
@@ -67,7 +66,6 @@ class RecognitionModel(L.LightningModule):
                  lr: float = 1e-3,
                  momentum: float = 0.9,
                  weight_decay: float = 1e-3,
-                 label_smoothing: float = 0.0,
                  schedule: Literal['cosine', 'exponential', 'step', 'reduceonplateau', 'constant'] = 'cosine',
                  step_size: int = 10,
                  gamma: float = 0.1,
@@ -76,11 +74,9 @@ class RecognitionModel(L.LightningModule):
                  cos_t_max: float = 30,
                  cos_min_lr: float = 1e-4,
                  warmup: int = 15000,
-                 layer_lr_decay: float = 0.0,
                  encoder: str = 'swin_base_patch4_window12_384.ms_in22k',
                  encoder_input_size: Tuple[int, int] = (2560, 1920),
                  decoder: str = 'mittagessen/bytellama_oscar',
-                 decoder_attn_dropout: float = 0.0,
                  pretrained: bool = True,
                  freeze_encoder: bool = False,
                  **kwargs):
@@ -105,8 +101,7 @@ class RecognitionModel(L.LightningModule):
         l_red = encoder_model.feature_info[l_idx]['reduction']
 
         decoder_model = bytellama_vision_decoder(pretrained=decoder if pretrained else None,
-                                                 encoder_max_seq_len=encoder_input_size[0] // l_red * encoder_input_size[1] // l_red,
-                                                 attn_dropout=decoder_attn_dropout)
+                                                 encoder_max_seq_len=encoder_input_size[0] // l_red * encoder_input_size[1] // l_red)
 
         self.model = PartyModel(encoder=encoder_model,
                                 decoder=decoder_model,
@@ -119,7 +114,7 @@ class RecognitionModel(L.LightningModule):
 
         self.model.train()
 
-        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.criterion = nn.CrossEntropyLoss()
         self.model_step = torch.compile(model_step, backend="aot_eager", dynamic=False)
 
         self.val_mean = MeanMetric()
@@ -261,12 +256,8 @@ def _configure_optimizer_and_lr_scheduler(hparams, model, loss_tracking_mode='mi
     rop_factor = hparams.get("rop_factor")
     rop_patience = hparams.get("rop_patience")
     completed_epochs = hparams.get("completed_epochs")
-    layer_lr_decay = hparams.get('layer_lr_decay')
 
-    if layer_lr_decay:
-        param_groups = group_layers(model, weight_decay=weight_decay)
-    else:
-        param_groups = filter(lambda p: p.requires_grad, model.parameters())
+    param_groups = filter(lambda p: p.requires_grad, model.parameters())
 
     # XXX: Warmup is not configured here because it needs to be manually done in optimizer_step()
     logger.debug(f'Constructing {optimizer} optimizer (lr: {lr}, momentum: {momentum})')
@@ -315,19 +306,3 @@ def _configure_optimizer_and_lr_scheduler(hparams, model, loss_tracking_mode='mi
         lr_sched['reduce_on_plateau'] = True
 
     return ret
-
-
-def group_layers(model,
-                 layer_decay: float = 0.9,
-                 weight_decay: float = 0.05):
-    layers = list(chain(model.encoder.layers, model.adapter, model.decoder.layers))
-    num_layers = len(layers)
-    layer_scales = list(layer_decay ** (num_layers - i - 1) for i in range(num_layers))
-    pgs = []
-    for scale, layer in zip(layer_scales, layers):
-        # filter out non-trainable parameters
-        if (params := list(filter(lambda p: p.requires_grad, layer.parameters()))):
-            pgs.append({'params': params,
-                        'lr_scale': scale,
-                        'weight_decay': weight_decay})
-    return pgs
