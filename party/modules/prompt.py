@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 __all__ = ['PromptEncoder']
 
 
+@torch.compiler.disable()
 class PromptEncoder(nn.Module):
     """
     Encodes prompts for input to party's decoder.
