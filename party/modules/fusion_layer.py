@@ -118,13 +118,6 @@ class FusionLayer(nn.Module):
             decoder_max_seq_len=decoder_max_seq_len,
         )
 
-    def delete_caches(self):
-        """
-        Deletes any setup caches.
-        """
-        self.layer.delete_caches()
-        self.fusion_layer.delete_caches()
-
     def caches_are_setup(self) -> bool:
         """
         Check if the key value caches are setup on ``self.layer``.

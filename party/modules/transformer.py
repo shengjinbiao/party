@@ -42,12 +42,6 @@ class TransformerSelfAttentionLayer(nn.Module):
         self.sa_scale = sa_scale or nn.Identity()
         self.mlp_scale = mlp_scale or nn.Identity()
 
-    def delete_caches(self):
-        """
-        Delete any cache.
-        """
-        self.attn.delete_cache()
-
     def setup_caches(
         self,
         batch_size: int,
@@ -176,12 +170,6 @@ class TransformerCrossAttentionLayer(nn.Module):
         self.mlp_norm = mlp_norm or nn.Identity()
         self.ca_scale = ca_scale or nn.Identity()
         self.mlp_scale = mlp_scale or nn.Identity()
-
-    def delete_caches(self):
-        """
-        Delete any cache.
-        """
-        self.attn.delete_cache()
 
     def setup_caches(
         self,
@@ -408,13 +396,6 @@ class TransformerDecoder(nn.Module):
         """Used to save memory in combination with :class:`~torchtune.modules.loss.CEWithChunkedOutputLoss`.
         This should be called before the first forward pass, in the recipe."""
         self.num_output_chunks = num_output_chunks
-
-    def delete_caches(self):
-        """
-        Delete any cache.
-        """
-        for layer in self.layers:
-            layer.delete_caches()
 
     def setup_caches(
         self,
