@@ -61,6 +61,10 @@ def cli(ctx, verbose, seed, deterministic, device, precision, threads):
         from lightning.pytorch import seed_everything
         seed_everything(42, workers=True)
 
+    if precision not in ['bf16-mixed', '32-true']:
+        logger.warning(f'Selected float precision {precision} is not in '
+                       '[bf16-mixed, 32-true]. party training is known to be '
+                       'unstable in bf16-true mode. Proceed with caution.')
     ctx.meta['verbose'] = verbose
     ctx.meta['device'] = device
     ctx.meta['precision'] = precision
