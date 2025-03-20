@@ -222,13 +222,15 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               show_default=True,
               default=RECOGNITION_HYPER_PARAMS['accumulate_grad_batches'],
               help='Number of batches to accumulate gradient across.')
+@click.option('--validate-before-train/--no-validate-before-train', show_default=True, default=True, help='Enables validation run before first training run.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
 def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_size, output, freq,
           quit, epochs, min_epochs, freeze_encoder, lag, min_delta, optimizer,
           lrate, momentum, weight_decay, gradient_clip_val, warmup, schedule,
           gamma, step_size, sched_patience, cos_max, cos_min_lr,
           training_files, evaluation_files, workers, threads, augment,
-          prompt_mode, accumulate_grad_batches, ground_truth):
+          prompt_mode, accumulate_grad_batches, validate_before_train,
+          ground_truth):
     """
     Trains a model from image-text pairs.
     """
@@ -348,7 +350,8 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
                                                     **hyper_params)
 
     with threadpool_limits(limits=threads):
-        trainer.validate(model, data_module)
+        if validate_before_train:
+            trainer.validate(model, data_module)
         trainer.fit(model, data_module)
 
     if not model.current_epoch:
