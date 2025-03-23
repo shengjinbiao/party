@@ -49,7 +49,8 @@ def bytellama_vision_decoder(vocab_size: int = 259,
                              rope_base: int = 10000,
                              encoder_max_seq_len: int = 4800,  # start of fusion parameters
                              fusion_interval: int = 3,
-                             pretrained: Optional[str] = None) -> TransformerDecoder:
+                             pretrained: Optional[str] = None,
+                             **kwargs) -> TransformerDecoder:
     """
     Builds a vision decoder from a ByteLlama model with additional fused cross
     attention layers. This includes:
