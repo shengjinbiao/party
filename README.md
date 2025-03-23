@@ -12,24 +12,23 @@ The current base model's character accuracies on the validation set with curve a
 
 | Script    | Code Points | %Right (curves) | %Right (boxes) |
 | :-------- | :---------- | :-------------- | :------------- |
-| Hiragana  | 1806        |  100.00%        | 100.00%        | 
-| Han       | 119259      |  98.67%         | 98.67%         |
-| Katakana  | 611         |  97.87%         | 97.87%         |
-| Cyrillic  | 29431       |  94.43%         | 94.22%         |
-| Common    | 69462       |  91.09%         | 89.82%         |
-| Latin     | 221855      |  90.19%         | 88.49%         |
-| Arabic    | 24992       |  89.04%         | 89.04%         |
-| Greek     | 135         |  85.19%         | 84.44%         |
-| Inherited | 4092        |  74.41%         | 74.07%         |
-| Georgian  | 2066        |  65.25%         | 69.51%         |
-| Unknown   | 201         |  51.74%         | 50.75%         |
-| Syriac    | 599         |  45.74%         | 41.24%         |
-| Newa      | 641         |  27.46%         | 24.49%         |
-| Hebrew    | 51          |  25.49%         | 23.53%         |
+| Han       | 107416      | 98.90%          | 98.88%         |  
+| Hiragana  | 1868        | 97.11%          | 97.11%         |
+| Cyrillic  | 22239       | 92.70%          | 92.34%         |
+| Greek     | 1036        | 92.28%          | 91.31%         |
+| Katakana  | 390         | 90.00%          | 90.00%         |
+| Latin     | 199703      | 88.02%          | 86.98%         |
+| Common    | 85863       | 80.24%          | 79.28%         |
+| Arabic    | 18061       | 79.22%          | 79.64%         |
+| Hebrew    | 40182       | 73.98%          | 73.97%         |
+| Inherited | 2886        | 61.61%          | 60.95%         |
+| Unknown   | 202         | 58.42%          | 57.43%         |
 
 The script types are determined from the Unicode script property of each individual code point.
 
-Georgian, Syriac, New, and Hebrew are very poorly recognized at the moment. We are working on it.
+The base model has been trained on Georgian, Syriac, Newa, Malayalam, and Devanagari, albeit with fairly small datasets. No pages with these scripts are contained in the validation sample.
+
+While the model performs quite well on languages and scripts that are commonly found in the training data, **it is generally expected that it requires fine-tuning for practical use, in particular to ensure alignment with desired transcription guidelines.**
 
 ## Installation
 
@@ -43,15 +42,15 @@ Party needs to be trained on datasets precompiled from PageXML or ALTO files con
 
 To fine-tune the pretrained base model dataset files in listed in manifest files on all available GPUs:
 
-        $ party train --load-from-repo 10.5281/zenodo.14616981 --workers 32 -t train.lst -e val.lst
+        $ party train --load-from-repo 10.5281/zenodo.14616980 --workers 32 -t train.lst -e val.lst
 
 With the default parameters both baseline and bounding box prompts are randomly sampled from the training data. It is suggested that you fine-tune the model with uni-modal line embeddings by only selecting the line format that your segmentation method produces, i.e.:
 
-        $ party train --load-from-repo 10.5281/zenodo.14616981 -t train.lst -e val.lst --prompt-mode curves
+        $ party train --load-from-repo 10.5281/zenodo.14616980 -t train.lst -e val.lst --prompt-mode curves
 
 or:
 
-        $ party train --load-from-repo 10.5281/zenodo.14616981 -t train.lst -e val.lst --prompt-mode boxes
+        $ party train --load-from-repo 10.5281/zenodo.14616980 -t train.lst -e val.lst --prompt-mode boxes
 
 To continue training from an existing checkpoint:
 
@@ -66,9 +65,11 @@ Checkpoints need to be converted into a safetensors format before being usable f
 
 ## Inference
 
+Inference and teseting requires a working [kraken](https://kraken.re) installation.
+
 To recognize text in pre-segmented page images in PageXML or ALTO with the pretrained model run:
 
-        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.14616981
+        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.14616980
 
 The paths to the image file(s) is automatically extracted from the XML input file(s).
 
@@ -87,12 +88,12 @@ Testing for now only works from XML files. As with for inference curve prompts a
 
         $  party -d cuda:0 test --curves --load-from-file arabic.safetensors  */*.xml
         $  party -d cuda:0 test --boxes --load-from-file arabic.safetensors  */*.xml
-        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.14616981 */*.xml
-        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.14616981 */*.xml
+        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.14616980 */*.xml
+        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.14616980 */*.xml
 
 ## Performance
 
-Training and inference resource consumption is highly dependent on various optimizations being enabled. Torch compilation which is required for various attention optimizations is enabled per default but lower precision training which isn't supported on CPU needs to be configured manually with `party --precision bf16-mixed ...`.
+Training and inference resource consumption is highly dependent on various optimizations being enabled. Torch compilation which is required for various attention optimizations is enabled per default but lower precision training which isn't supported on CPU needs to be configured manually with `party --precision bf16-mixed ...`. It is possible to reduce training memory requirements substantially by freezing the visual encoder with the `--freeze-encoder` option.
 
 Moderate speedups on CPU are possible with intra-op parallelism (`party --threads 4 ocr ...`).
 
