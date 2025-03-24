@@ -240,7 +240,7 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
     if load_from_checkpoint and load_from_repo:
         raise click.BadOptionsUsage('load_from_checkpoint', 'load_from_* options are mutually exclusive.')
     elif load_from_checkpoint is None and load_from_repo is None:
-        load_from_repo = '10.5281/zenodo.14616981'
+        load_from_repo = '10.5281/zenodo.15075344'
 
     if augment:
         try:
