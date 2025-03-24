@@ -42,15 +42,15 @@ Party needs to be trained on datasets precompiled from PageXML or ALTO files con
 
 To fine-tune the pretrained base model dataset files in listed in manifest files on all available GPUs:
 
-        $ party train --load-from-repo 10.5281/zenodo.14616980 --workers 32 -t train.lst -e val.lst
+        $ party train --load-from-repo 10.5281/zenodo.15073482 --workers 32 -t train.lst -e val.lst
 
 With the default parameters both baseline and bounding box prompts are randomly sampled from the training data. It is suggested that you fine-tune the model with uni-modal line embeddings by only selecting the line format that your segmentation method produces, i.e.:
 
-        $ party train --load-from-repo 10.5281/zenodo.14616980 -t train.lst -e val.lst --prompt-mode curves
+        $ party train --load-from-repo 10.5281/zenodo.15073482 -t train.lst -e val.lst --prompt-mode curves
 
 or:
 
-        $ party train --load-from-repo 10.5281/zenodo.14616980 -t train.lst -e val.lst --prompt-mode boxes
+        $ party train --load-from-repo 10.5281/zenodo.15073482 -t train.lst -e val.lst --prompt-mode boxes
 
 To continue training from an existing checkpoint:
 
@@ -69,7 +69,7 @@ Inference and teseting requires a working [kraken](https://kraken.re) installati
 
 To recognize text in pre-segmented page images in PageXML or ALTO with the pretrained model run:
 
-        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.14616980
+        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.15073482
 
 The paths to the image file(s) is automatically extracted from the XML input file(s).
 
@@ -88,8 +88,8 @@ Testing for now only works from XML files. As with for inference curve prompts a
 
         $  party -d cuda:0 test --curves --load-from-file arabic.safetensors  */*.xml
         $  party -d cuda:0 test --boxes --load-from-file arabic.safetensors  */*.xml
-        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.14616980 */*.xml
-        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.14616980 */*.xml
+        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.15073482 */*.xml
+        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.15073482 */*.xml
 
 ## Performance
 
