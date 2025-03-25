@@ -463,7 +463,7 @@ class PartyModel(nn.Module):
                        boxes: Optional[torch.FloatTensor] = None,
                        eos_id: int = 2) -> Generator[torch.Tensor, None, None]:
         """
-        Predicts text from an input page image and a number of quadratic Bézier
+        Predicts text from an input page image and a number of cubic Bézier
         curves.
 
         Args:
@@ -574,7 +574,7 @@ class PartyModel(nn.Module):
                        boxes: Optional[torch.FloatTensor] = None,
                        eos_id: int = 2) -> Generator[str, None, None]:
         """
-        Predicts text from an input page image and a number of quadratic Bézier
+        Predicts text from an input page image and a number of cubic Bézier
         curves.
 
         Args:

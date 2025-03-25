@@ -52,7 +52,7 @@ def _box_prompt_fn(line: Union['BaselineLine', 'BBoxLine'], im_size: Tuple[int, 
 
 def _curve_prompt_fn(line: 'BaselineLine', im_size: Tuple[int, int]) -> torch.Tensor:
     """
-    Converts a BaselineLine to a quadratic Bézier curve.
+    Converts a BaselineLine to a cubic Bézier curve.
     """
     return _to_curve(line.baseline, im_size).as_py()
 

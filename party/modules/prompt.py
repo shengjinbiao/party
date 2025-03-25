@@ -64,7 +64,7 @@ class PromptEncoder(nn.Module):
                 curves: Optional[torch.FloatTensor] = None,
                 boxes: Optional[torch.FloatTensor] = None) -> torch.Tensor:
         """
-        Embeds different types of prompts, either quadratic Bézier curves or
+        Embeds different types of prompts, either cubic Bézier curves or
         bounding boxes.
 
         Args:
