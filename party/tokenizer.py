@@ -16,13 +16,80 @@
 """
 """
 import logging
-from typing import List
+from typing import List, TYPE_CHECKING, Optional
 
-from torch import IntTensor
+if TYPE_CHECKING:
+    from torch import IntTensor
 
 __all__ = ['OctetTokenizer']
 
 logger = logging.getLogger(__name__)
+
+LANG_TO_ISO = {'arabic': 'ara',
+               'catalan': 'cat',
+               'chinese': 'cmn',
+               'corsican': 'cos',
+               'czech': 'ces',
+               'old_church_slavonic': 'chu',
+               'german': 'deu',
+               'english': 'eng',
+               'persian': 'fas',
+               'finnish': 'fin',
+               'french': 'fra',
+               'greek': 'grc',
+               'hebrew': 'heb',
+               'italian': 'ita',
+               'japanese': 'jpn',
+               'georgian': 'kat',
+               'latin': 'lat',
+               'malayalam': 'mal',
+               'newari': 'new',
+               'norwegian': 'nor',
+               'dutch': 'nld',
+               'turkish_ottoman': 'ota',
+               'occitan': 'oci',
+               'portuguese': 'por',
+               'russian': 'rus',
+               'sanskrit': 'san',
+               'swedish': 'swe',
+               'spanish': 'spa',
+               'syriac': 'syr',
+               'urdu': 'urd',
+               'ukrainian': 'ukr',
+               'yiddish': 'yid'}
+
+ISO_TO_IDX = {'ara': 0,
+              'cat': 1,
+              'ces': 2,
+              'chu': 3,
+              'cmn': 4,
+              'cos': 5,
+              'deu': 6,
+              'eng': 7,
+              'fas': 8,
+              'fin': 9,
+              'fra': 10,
+              'grc': 11,
+              'heb': 12,
+              'ita': 13,
+              'jpn': 14,
+              'kat': 15,
+              'lat': 16,
+              'mal': 17,
+              'new': 18,
+              'nld': 19,
+              'nor': 20,
+              'oci': 21,
+              'ota': 22,
+              'por': 23,
+              'rus': 24,
+              'san': 25,
+              'spa': 26,
+              'swe': 27,
+              'syr': 28,
+              'ukr': 29,
+              'urd': 30,
+              'yid': 31}
 
 
 class OctetTokenizer(object):
@@ -39,7 +106,9 @@ class OctetTokenizer(object):
     pad_id = 0
     bos_id = 1
     eos_id = 2
-    _offset = 3
+    # leave space for 128 lang tokens before actual text output
+    _lang_offset = 3
+    _offset = _lang_offset + min(len(ISO_TO_IDX), 128)
 
     def __init__(self):
         pass
@@ -59,6 +128,7 @@ class OctetTokenizer(object):
 
     def encode(self,
                text: str,
+               langs: Optional[[List[str]]] = None,
                add_bos: bool = True,
                add_eos: bool = True) -> List[int]:
         """
@@ -66,6 +136,7 @@ class OctetTokenizer(object):
 
         Args:
             text: The input text to be encoded, unbatched.
+            langs: List of lang tokens to insert between BOS and first text token.
             add_bos: Whether to prepend BOS to the input, defaults to True.
             add_eos: Whether to append EOS to the input, defaults to True.
 
@@ -75,13 +146,15 @@ class OctetTokenizer(object):
         tokens = []
         if add_bos:
             tokens.append(self.bos_id)
+        if langs:
+            tokens.add([self._lang_offset + ISO_TO_IDX[lang] for lang in langs])
         tokens.extend([i + self._offset for i in text.encode("utf-8")])
         if add_eos:
             tokens.append(self.eos_id)
 
         return tokens
 
-    def decode(self, ids: IntTensor) -> str:
+    def decode(self, ids: 'IntTensor') -> str:
         """Decode token IDs to strings.
 
         Args:
