@@ -24,6 +24,7 @@ import lightning.pytorch as L
 import tempfile
 import pyarrow as pa
 
+from pathlib import Path
 from itertools import islice
 
 from torch.distributed import get_rank, get_world_size, is_initialized
@@ -40,7 +41,7 @@ from PIL import Image
 
 from scipy.special import comb
 
-from party.tokenizer import OctetTokenizer
+from party.tokenizer import OctetTokenizer, LANG_TO_ISO
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -135,7 +136,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     line_struct = pa.struct([('text', pa.string()),
                              ('curve', pa.list_(pa.float32())),
                              ('bbox', pa.list_(pa.float32()))])
-    page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
+    page_struct = pa.struct([('im', pa.binary()),
+                             ('lang', pa.string()),
+                             ('lines', pa.list_(line_struct))])
 
     tokenizer = OctetTokenizer()
 
@@ -171,6 +174,10 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                                 break
                             except Exception:
                                 continue
+                        # parse language by traversing path component
+                        for part in Path(file).parts[::-1]:
+                            if (lang := LANG_TO_ISO.get(part, 'und')) != 'und':
+                                break
                     except Exception:
                         continue
                     if im_path is None:
@@ -203,7 +210,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                     if len(page_data) > 1:
                         with open(im_path, 'rb') as fp:
                             im = fp.read()
-                        ar = pa.array([pa.scalar({'im': im, 'lines': page_data}, page_struct)], page_struct)
+                        ar = pa.array([pa.scalar({'im': im,
+                                                  'lang': lang,
+                                                  'lines': page_data}, page_struct)], page_struct)
                         writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
                         max_lines_in_page = max(len(page_data), max_lines_in_page)
                     callback(1, len(files))

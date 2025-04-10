@@ -56,6 +56,7 @@ LANG_TO_ISO = {'arabic': 'ara',
                'syriac': 'syr',
                'urdu': 'urd',
                'ukrainian': 'ukr',
+               'undetermined': 'und',
                'yiddish': 'yid'}
 
 ISO_TO_IDX = {'ara': 0,
@@ -88,8 +89,9 @@ ISO_TO_IDX = {'ara': 0,
               'swe': 27,
               'syr': 28,
               'ukr': 29,
-              'urd': 30,
-              'yid': 31}
+              'und': 30
+              'urd': 31,
+              'yid': 32}
 
 
 class OctetTokenizer(object):
