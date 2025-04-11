@@ -110,8 +110,10 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
 @click.command('train')
 @click.pass_context
 @click.option('--load-from-checkpoint', default=None, type=click.Path(exists=True), help='Path to checkpoint to load')
+@click.option('--load-from-safetensors', default=None, type=click.Path(exists=True), help='Path to safetensors file to load')
 @click.option('--load-from-repo', default=None, help='Identifier of model on huggingface hub, .e.g `10.5281/zenodo.14616981`')
 @click.option('--train-from-scratch', is_flag=True, show_default=True, default=False, help='Train model from scratch')
+@click.option('--resume-from-checkpoint', default=None, type=click.Path(exists=True), help='Path to checkpoint to resume from')
 @click.option('-B', '--batch-size', show_default=True, type=click.INT,
               default=RECOGNITION_HYPER_PARAMS['batch_size'], help='batch sample size')
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='model', help='Output model file')
@@ -224,7 +226,8 @@ def compile(ctx, output, files, normalization, normalize_whitespace,
               help='Number of batches to accumulate gradient across.')
 @click.option('--validate-before-train/--no-validate-before-train', show_default=True, default=True, help='Enables validation run before first training run.')
 @click.argument('ground_truth', nargs=-1, callback=_expand_gt, type=click.Path(exists=False, dir_okay=False))
-def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_size, output, freq,
+def train(ctx, load_from_checkpoint, load_from_safetensors, load_from_repo,
+          train_from_scratch, resume_from_checkpoint, batch_size, output, freq,
           quit, epochs, min_epochs, freeze_encoder, lag, min_delta, optimizer,
           lrate, momentum, weight_decay, gradient_clip_val, warmup, schedule,
           gamma, step_size, sched_patience, cos_max, cos_min_lr,
@@ -237,9 +240,9 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
     if not (0 <= freq <= 1) and freq % 1.0 != 0:
         raise click.BadOptionUsage('freq', 'freq needs to be either in the interval [0,1.0] or a positive integer.')
 
-    if load_from_checkpoint and load_from_repo:
+    if sum(map(bool, [load_from_checkpoint, load_from_repo, load_from_safetensors, resume_from_checkpoint])) > 1:
         raise click.BadOptionsUsage('load_from_checkpoint', 'load_from_* options are mutually exclusive.')
-    elif load_from_checkpoint is None and load_from_repo is None:
+    elif load_from_checkpoint is None and load_from_repo is None and load_from_safetensors is None and resume_from_checkpoint is None:
         load_from_repo = '10.5281/zenodo.15075344'
 
     if augment:
@@ -256,7 +259,7 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
     from lightning.pytorch import Trainer
     from lightning.pytorch.callbacks import RichModelSummary, ModelCheckpoint, RichProgressBar
 
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision('high')
 
     hyper_params = RECOGNITION_HYPER_PARAMS.copy()
     hyper_params.update({'freq': freq,
@@ -302,12 +305,15 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
     else:
         val_check_interval = {'val_check_interval': hyper_params['freq']}
 
-    data_module = TextLineDataModule(training_data=ground_truth,
-                                     evaluation_data=evaluation_files,
-                                     prompt_mode=prompt_mode,
-                                     augmentation=augment,
-                                     batch_size=batch_size,
-                                     num_workers=workers)
+    if resume_from_checkpoint:
+        data_module = TextLineDataModule.load_from_checkpoint(resume_from_checkpoint)
+    else:
+        data_module = TextLineDataModule(training_data=ground_truth,
+                                         evaluation_data=evaluation_files,
+                                         prompt_mode=prompt_mode,
+                                         augmentation=augment,
+                                         batch_size=batch_size,
+                                         num_workers=workers)
 
     cbs = [RichModelSummary(max_depth=2)]
 
@@ -344,18 +350,22 @@ def train(ctx, load_from_checkpoint, load_from_repo, train_from_scratch, batch_s
             message(f'Loading from checkpoint {load_from_checkpoint}.')
             model = RecognitionModel.load_from_checkpoint(load_from_checkpoint,
                                                           **hyper_params)
+        elif resume_from_checkpoint:
+            message(f'Resuming from checkpoint {resume_from_checkpoint}.')
+            model = RecognitionModel.load_from_checkpoint(resume_from_checkpoint)
         elif load_from_repo:
             message(f'Loading from huggingface hub {load_from_repo}.')
             model = RecognitionModel.load_from_repo(load_from_repo,
                                                     **hyper_params)
 
     with threadpool_limits(limits=threads):
-        if validate_before_train:
-            trainer.validate(model, data_module)
-        trainer.fit(model, data_module)
+        if resume_from_checkpoint:
+            trainer.fit(model, data_module, ckpt_path=resume_from_checkpoint)
+        else:
+            if validate_before_train:
+                trainer.validate(model, data_module)
+            trainer.fit(model, data_module)
 
     if not model.current_epoch:
         logger.warning('Training aborted before end of first epoch.')
         ctx.exit(1)
-
-    print(f'Best model {checkpoint_callback.best_model_path}')
