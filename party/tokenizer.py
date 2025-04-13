@@ -119,8 +119,8 @@ class OctetTokenizer(object):
     bos_id = 1
     eos_id = 2
     # leave space for 128 lang tokens before actual text output
-    _lang_offset = 3
-    _offset = _lang_offset + min(len(ISO_TO_IDX), 128)
+    _offset = 3
+    _lang_offset = _offset + 256
 
     def __init__(self):
         pass
@@ -129,14 +129,14 @@ class OctetTokenizer(object):
         """
         Total number of input labels the codec can decode.
         """
-        return 256 + self._offset
+        return self._lang_offset + min(len(ISO_TO_IDX), 128)
 
     @property
     def max_label(self) -> int:
         """
         Returns the maximum label value.
         """
-        return 255 + self._offset
+        return self._lang_offset + min(len(ISO_TO_IDX), 128) - 1
 
     def encode(self,
                text: str,
@@ -175,5 +175,6 @@ class OctetTokenizer(object):
         Returns:
             str: The decoded text.
         """
-        string = bytes([x - self._offset for x in ids]).decode("utf-8", errors="ignore")
+        ids = [id - self._offset for id in ids if self._offset <= id < self._lang_offset]
+        string = bytes(ids).decode("utf-8", errors="ignore")
         return string

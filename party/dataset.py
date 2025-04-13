@@ -377,7 +377,7 @@ class BinnedBaselineDataset(Dataset):
 
         item = self.arrow_table.column('pages')[idx].as_py()
         logger.debug(f'Attempting to load {item["im"]}')
-        im, page_data = item['im'], item['lines']
+        im, lang, page_data = item['im'], item['lang'], item['lines']
         try:
             im = Image.open(io.BytesIO(im)).convert('RGB')
         except Exception:
@@ -399,7 +399,7 @@ class BinnedBaselineDataset(Dataset):
             return_boxes = False
         for x in rng.choice(len(page_data), self.batch_size, replace=True, shuffle=False):
             line = page_data[x]
-            tokens = torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32)
+            tokens = torch.tensor(self.tokenizer.encode(line['text'], langs=[lang], dd_bos=True, add_eos=True), dtype=torch.int32)
             curve = torch.tensor(line['curve']).view(4, 2) if not return_boxes else None
             bbox = torch.tensor(line['bbox']).view(4, 2) if return_boxes else None
             sample.append((tokens, curve, bbox))
@@ -468,7 +468,7 @@ class ValidationBaselineDataset(IterableDataset):
         for item in self.arrow_table.column('pages')[replica_rank::num_replicas]:
             item = item.as_py()
             logger.debug(f'Attempting to load {item["im"]}')
-            im, page_data = item['im'], item['lines']
+            im, lang, page_data = item['im'], item['lang'], item['lines']
             im = Image.open(io.BytesIO(im)).convert('RGB')
             im = self.transforms(im)
             if self.aug:
@@ -497,7 +497,7 @@ class ValidationBaselineDataset(IterableDataset):
                         curves.append(torch.tensor(line['curve']).view(4, 2))
                     if return_boxes:
                         boxes.append(torch.tensor(line['bbox']).view(4, 2))
-                    tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
+                    tokens.append(torch.tensor(self.tokenizer.encode(line['text'], langs=[lang], add_bos=True, add_eos=True), dtype=torch.int32))
 
                 tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
                 boxes = torch.stack(boxes) if len(boxes) else None
