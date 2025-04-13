@@ -163,7 +163,7 @@ class OctetTokenizer(object):
         if add_bos:
             tokens.append(self.bos_id)
         if langs:
-            tokens.add([LANG_OFFSET + ISO_TO_IDX[lang] for lang in langs])
+            tokens.extend([LANG_OFFSET + ISO_TO_IDX[lang] for lang in langs])
         tokens.extend([i + OFFSET for i in text.encode("utf-8")])
         if add_eos:
             tokens.append(self.eos_id)
