@@ -105,7 +105,7 @@ ISO_TO_IDX = {'ara': 0,
 
 OFFSET = 3
 LANG_OFFSET = OFFSET + 256
-TOKEN_NUM = LANG_OFFSET + min(len(ISO_TO_IDX), 128)
+TOKEN_NUM = LANG_OFFSET + max(len(ISO_TO_IDX), 128)
 
 
 class OctetTokenizer(object):
