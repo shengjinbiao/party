@@ -20,6 +20,8 @@ import torch
 from safetensors.torch import save_file
 from typing import Optional, Union, TYPE_CHECKING
 
+from party.tokenizer import NUM_TOKENS
+
 if TYPE_CHECKING:
     from os import PathLike
 
@@ -34,7 +36,7 @@ def checkpoint_to_kraken(checkpoint_path: Union[str, 'PathLike'],
     state_dict = torch.load(checkpoint_path, map_location=torch.device('cpu'), weights_only=True)
     # we do not have configurable encoders/decoders
     config = {"prompt_mode": state_dict['datamodule_hyper_parameters']['prompt_mode'],
-              "decoder_vocab_size": 259,
+              "decoder_vocab_size": NUM_TOKENS,
               "decoder_num_layers": 30,
               "decoder_num_heads": 9,
               "decoder_num_kv_heads": 3,

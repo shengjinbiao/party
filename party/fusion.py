@@ -27,7 +27,7 @@ from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
                            FusionLayer, scale_hidden_dim_for_mlp,
                            Llama3ScaledRoPE, llama3_mlp, PromptEncoder)
 
-from party.tokenizer import OctetTokenizer
+from party.tokenizer import OctetTokenizer, NUM_TOKENS
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 __all__ = ['bytellama_vision_decoder', 'PartyModel']
 
 
-def bytellama_vision_decoder(vocab_size: int = 259,
+def bytellama_vision_decoder(vocab_size: int = NUM_TOKENS,
                              num_layers: int = 30,
                              num_heads: int = 9,
                              num_kv_heads: int = 3,
