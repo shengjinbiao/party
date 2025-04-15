@@ -27,7 +27,7 @@ from party.modules import (MultiHeadAttention, RMSNorm, TanhGate,
                            FusionLayer, scale_hidden_dim_for_mlp,
                            Llama3ScaledRoPE, llama3_mlp, PromptEncoder)
 
-from party.tokenizer import OctetTokenizer, TOKEN_NUM 
+from party.tokenizer import OctetTokenizer, TOKEN_NUM
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -244,6 +244,9 @@ class PartyModel(nn.Module):
         encoder_embed_dim: Embedding dimension of the encoder
         decoder_embed_dim: Embedding dimension of the decoder
     """
+
+    tokenizer = OctetTokenizer()
+
     def __init__(self,
                  encoder: nn.Module,
                  decoder: nn.Module,
@@ -433,7 +436,6 @@ class PartyModel(nn.Module):
 
     @torch.inference_mode()
     def prepare_for_generation(self,
-                               bos_id: int = 1,
                                batch_size: int = 8,
                                max_encoder_seq_len: int = 19200,
                                max_generated_tokens: int = 384,
@@ -460,7 +462,6 @@ class PartyModel(nn.Module):
                           dtype=next(self.encoder.parameters()).dtype)
 
         # create batch size number of BOS tokens
-        self._prompt = torch.full((batch_size, 1), bos_id, device=device, dtype=torch.long)
         self.ready_for_generation = True
 
     @torch.inference_mode()
@@ -468,7 +469,7 @@ class PartyModel(nn.Module):
                        encoder_input: torch.FloatTensor,
                        curves: Optional[torch.FloatTensor] = None,
                        boxes: Optional[torch.FloatTensor] = None,
-                       eos_id: int = 2) -> Generator[torch.Tensor, None, None]:
+                       languages: Optional[List[str]] = None) -> Generator[torch.Tensor, None, None]:
         """
         Predicts text from an input page image and a number of cubic Bézier
         curves.
@@ -478,7 +479,6 @@ class PartyModel(nn.Module):
             curves: Curves to be embedded and added to the encoder embeddings (``n x 4 x 2``)
             boxes: Boxes to be embedded and added to the encoder embeddings (``n x 4 x 2``)
             batch_size: Number of curves to generate text for simultaneously.
-            eos_id: EOS ID of tokenizer
 
         Yields:
             A tensor of integer labels with shape ``n x s`` where ``s` is the
@@ -495,7 +495,11 @@ class PartyModel(nn.Module):
 
         encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
 
-        eos_token = torch.tensor(eos_id, device=encoder_hidden_states.device, dtype=torch.long)
+        _prompt = torch.long(self.tokenizer.encode('', langs=languages, add_eos=False),
+                             device=encoder_hidden_states.device,
+                             dtype=torch.long).repeat(self._batch_size, 1)
+
+        eos_token = torch.tensor(self.tokenizer.eos_id, device=encoder_hidden_states.device, dtype=torch.long)
 
         line_pos = curves if curves is not None else boxes
         batches = torch.split(line_pos, self._batch_size)
@@ -526,7 +530,7 @@ class PartyModel(nn.Module):
 
             # prefill step
             curr_masks = self._masks[:, :1]
-            logits = self.forward(tokens=self._prompt[:bsz, ...],
+            logits = self.forward(tokens=_prompt[:bsz, ...],
                                   encoder_hidden_states=exp_encoder_hidden_states,
                                   encoder_mask=encoder_mask[:bsz, ...],
                                   mask=curr_masks,
@@ -579,7 +583,7 @@ class PartyModel(nn.Module):
                        encoder_input: torch.FloatTensor,
                        curves: Optional[torch.FloatTensor] = None,
                        boxes: Optional[torch.FloatTensor] = None,
-                       eos_id: int = 2) -> Generator[str, None, None]:
+                       languages: Optional[List[str]] = None) -> Generator[str, None, None]:
         """
         Predicts text from an input page image and a number of cubic Bézier
         curves.
@@ -587,16 +591,14 @@ class PartyModel(nn.Module):
         Args:
             encoder_input: Image input for the encoder with shape ``[1 x c x h x w]``
             curves: Curves to be embedded and added to the encoder embeddings (``n x 4 x 2``)
-            batch_size: Number of curves to generate text for simultaneously.
-            eos_id: EOS ID of tokenizer
+            languages: ISO693-3 identifiers of the languages of the lines.
 
         Yields:
 
         """
-        tokenizer = OctetTokenizer()
         for preds in self.predict_tokens(encoder_input=encoder_input,
                                          curves=curves,
                                          boxes=boxes,
-                                         eos_id=eos_id):
+                                         languages=languages):
             for pred in preds:
-                yield tokenizer.decode(pred[pred != 0])
+                yield self.tokenizer.decode(pred[pred != 0])

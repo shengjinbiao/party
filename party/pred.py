@@ -80,6 +80,7 @@ class batched_pred(object):
         im: Pillow image
         bounds: Segmentation for input image
         fabric: Fabric context manager to cast models and tensors.
+        languages: ISO693-3 identifiers of the languages in the page.
         prompt_mode: How to embed line positional prompts. Per default prompts
                      are determined by the segmentation type if the model
                      indicates either curves or boxes are supported. If the
@@ -102,6 +103,7 @@ class batched_pred(object):
                  im: 'Image.Image',
                  bounds: 'Segmentation',
                  fabric: 'Fabric',
+                 languages: Optional[List[str]] = None,
                  prompt_mode: Optional[Literal['curves', 'boxes']] = None,
                  batch_size: int = 2) -> Generator['ocr_record', None, None]:
         m_prompt_mode = model.line_prompt_mode
@@ -145,7 +147,8 @@ class batched_pred(object):
 
             self._pred = zip(model.predict_string(encoder_input=image_input,
                                                   curves=lines if self.prompt_mode == 'curves' else None,
-                                                  boxes=lines if self.prompt_mode == 'boxes' else None),
+                                                  boxes=lines if self.prompt_mode == 'boxes' else None,
+                                                  languages=languages),
                              bounds.lines)
 
     def __next__(self):
