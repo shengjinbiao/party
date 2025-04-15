@@ -27,6 +27,8 @@ from pathlib import Path
 
 from .util import to_ptl_device
 
+from party.tokenizer import ISO_TO_IDX
+
 logging.captureWarnings(True)
 logger = logging.getLogger('party')
 
@@ -84,11 +86,14 @@ def _repl_page(fname, preds):
               show_default=True,
               help="Path to the party model to evaluate")
 @click.option('--curves/--boxes', help='Encode line prompts as bounding boxes or curves', default=None, show_default=True)
+@click.option('-l', '--language', multiple=True, default=None,
+              show_default=True, type=click.Choice(list(ISO_TO_IDX.keys())),
+              help='ISO693-3 code(s) for language(s) in input images.')
 @click.option('--compile/--no-compile', help='Switch to enable/disable torch.compile() on model', default=True, show_default=True)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
 @click.option('-b', '--batch-size', default=2, help='Set batch size in generator')
 def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
-        curves, compile, quantize, batch_size):
+        curves, language, compile, quantize, batch_size):
     """
     Runs text recognition on pre-segmented images in XML format.
     """
@@ -187,6 +192,7 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
                                          bounds=bounds,
                                          fabric=fabric,
                                          prompt_mode=curves,
+                                         languages=language,
                                          batch_size=batch_size)
 
                 preds = []

@@ -25,7 +25,7 @@ from dataclasses import asdict
 
 from kraken.containers import BBoxOCRRecord, BaselineOCRRecord, BBoxLine
 
-from typing import TYPE_CHECKING, Union, Tuple, Optional, Literal, Generator
+from typing import TYPE_CHECKING, Union, Tuple, Optional, Literal, Generator, List
 
 from party.dataset import get_default_transforms, _to_curve, _to_bbox
 
