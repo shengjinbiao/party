@@ -21,7 +21,7 @@ API for inference
 import torch
 import logging
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from kraken.containers import BBoxOCRRecord, BaselineOCRRecord, BBoxLine
 
@@ -152,15 +152,16 @@ class batched_pred(object):
                              bounds.lines)
 
     def __next__(self):
-        pred_str, line = next(self._pred)
+        (pred_text, pred_langs), line = next(self._pred)
+        line = replace(line, language=pred_langs)
         if self.prompt_mode == 'curves':
-            return BaselineOCRRecord(prediction=pred_str,
+            return BaselineOCRRecord(prediction=pred_text,
                                      cuts=tuple(),
                                      confidences=tuple(),
                                      line=line,
                                      display_order=False)
         else:
-            return BBoxOCRRecord(prediction=pred_str,
+            return BBoxOCRRecord(prediction=pred_text,
                                  cuts=tuple(),
                                  confidences=tuple(),
                                  line=_baseline_to_bbox(line),

@@ -16,7 +16,8 @@
 """
 """
 import logging
-from typing import List, TYPE_CHECKING, Optional
+
+from typing import List, TYPE_CHECKING, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from torch import IntTensor
@@ -103,6 +104,8 @@ ISO_TO_IDX = {'ara': 0,
               'urd': 36,
               'yid': 37}
 
+LANG_IDX_TO_ISO = {v: k for k, v in ISO_TO_IDX.items()}
+
 OFFSET = 3
 LANG_OFFSET = OFFSET + 256
 TOKEN_NUM = LANG_OFFSET + max(len(ISO_TO_IDX), 128)
@@ -170,15 +173,17 @@ class OctetTokenizer(object):
 
         return tokens
 
-    def decode(self, ids: 'IntTensor') -> str:
+    def decode(self, ids: 'IntTensor') -> Tuple[str, Set[str]]:
         """Decode token IDs to strings.
 
         Args:
             ids: The input token IDs to be decoded.
 
         Returns:
-            str: The decoded text.
+            A tuple containing the decoded text and any language tags in
+            the input tensor.
         """
         ids = [id - OFFSET for id in ids if OFFSET <= id < LANG_OFFSET]
-        string = bytes(ids).decode("utf-8", errors="ignore")
-        return string
+        lang_ids = set(LANG_IDX_TO_ISO.get(id - LANG_OFFSET, 'und') for id in ids if id >= LANG_OFFSET)
+        text = bytes(ids).decode("utf-8", errors="ignore")
+        return text, lang_ids
