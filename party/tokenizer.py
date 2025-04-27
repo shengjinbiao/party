@@ -144,7 +144,7 @@ class OctetTokenizer(object):
 
     def encode(self,
                text: str,
-               langs: Optional[[List[str]]] = None,
+               langs: Optional[List[str]] = None,
                add_bos: bool = True,
                add_eos: bool = True) -> List[int]:
         """
