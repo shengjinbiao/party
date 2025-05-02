@@ -26,6 +26,7 @@ __all__ = ['OctetTokenizer']
 
 logger = logging.getLogger(__name__)
 
+
 LANG_TO_ISO = {'arabic': 'ara',
                'catalan': 'cat',
                'chinese': 'cmn',
@@ -39,11 +40,15 @@ LANG_TO_ISO = {'arabic': 'ara',
                'french': 'fra',
                'ancient_greek': 'grc',
                'hebrew': 'heb',
+               'irish': 'gle',
                'italian': 'ita',
                'japanese': 'jpn',
+               'geez': 'gez',
                'georgian': 'kat',
                'ladino': 'lad',
                'latin': 'lat',
+               'latvian': 'lav',
+               'lithuanian': 'lit',
                'malayalam': 'mal',
                'middle_dutch': 'dum',
                'middle_french': 'frm',
@@ -53,16 +58,20 @@ LANG_TO_ISO = {'arabic': 'ara',
                'ottoman_turkish': 'ota',
                'occitan': 'oci',
                'picard': 'pcd',
+               'polish': 'pol',
                'portuguese': 'por',
+               'romanian': 'ron',
                'russian': 'rus',
                'sanskrit': 'san',
+               'slovenian': 'slv',
                'swedish': 'swe',
                'spanish': 'spa',
                'syriac': 'syr',
                'urdu': 'urd',
                'ukrainian': 'ukr',
                'undetermined': 'und',
-               'shorthand_german': 'qaa',
+               'german_shorthand': 'qaa',
+               'serbian_cyrl': 'qab',
                'yiddish': 'yid'}
 
 ISO_TO_IDX = {'ara': 0,
@@ -102,7 +111,15 @@ ISO_TO_IDX = {'ara': 0,
               'ukr': 34,
               'und': 35,
               'urd': 36,
-              'yid': 37}
+              'yid': 37,
+              'ron': 38,
+              'qab': 39,
+              'lav': 40,
+              'gle': 41,
+              'slv': 42,
+              'lit': 43,
+              'pol': 44,
+              'gez': 45}
 
 LANG_IDX_TO_ISO = {v: k for k, v in ISO_TO_IDX.items()}
 
