@@ -102,6 +102,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
     from party.pred import batched_pred
     from party.fusion import PartyModel
+    from party.tokenizer import LANG_TO_ISO
 
     torch.set_float32_matmul_precision('medium')
 
@@ -165,10 +166,10 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
                 languages = None
                 if add_lang_token:
-                    for part in Path(file).parts[::-1]:
+                    for part in input_file.parts[::-1]:
                         if (lang := LANG_TO_ISO.get(part, 'und')) != 'und':
                             break
-                    languages = [languages]
+                    languages = [lang]
 
                 try:
                     doc = XMLPage(input_file)
