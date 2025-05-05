@@ -80,6 +80,7 @@ class RecognitionModel(L.LightningModule):
                  decoder: str = 'mittagessen/bytellama_oscar',
                  pretrained: bool = True,
                  freeze_encoder: bool = False,
+                 batch_size: int = 16,
                  **kwargs):
         super().__init__()
 
@@ -147,8 +148,10 @@ class RecognitionModel(L.LightningModule):
         # through the model after replacing ignored indices.
         tokens.masked_fill_(tokens == self.criterion.ignore_index, 0)
 
+        batch_size = self.hparams.batch_size
+
         if batch['curves'] is not None:
-            for batch_tokens, batch_targets, batch_curves in zip(tokens.split(32), targets.split(32), batch['curves'].split(32)):
+            for batch_tokens, batch_targets, batch_curves in zip(tokens.split(batch_size), targets.split(batch_size), batch['curves'].split(batch_size)):
                 logits = self.model(tokens=tokens,
                                     encoder_input=batch['image'],
                                     encoder_curves=batch['curves'],
@@ -159,7 +162,7 @@ class RecognitionModel(L.LightningModule):
                 self.val_mean.update(loss)
 
         if batch['boxes'] is not None:
-            for batch_tokens, batch_targets, batch_boxes in zip(tokens.split(32), targets.split(32), batch['boxes'].split(32)):
+            for batch_tokens, batch_targets, batch_boxes in zip(tokens.split(batch_size), targets.split(batch_size), batch['boxes'].split(batch_size)):
                 logits = self.model(tokens=tokens,
                                     encoder_input=batch['image'],
                                     encoder_curves=None,
