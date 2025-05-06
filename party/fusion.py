@@ -495,9 +495,9 @@ class PartyModel(nn.Module):
 
         encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
 
-        _prompt = torch.long(self.tokenizer.encode('', langs=languages, add_eos=False),
-                             device=encoder_hidden_states.device,
-                             dtype=torch.long).repeat(self._batch_size, 1)
+        _prompt = torch.tensor(self.tokenizer.encode('', langs=languages, add_eos=False),
+                               device=encoder_hidden_states.device,
+                               dtype=torch.long).repeat(self._batch_size, 1)
 
         eos_token = torch.tensor(self.tokenizer.eos_id, device=encoder_hidden_states.device, dtype=torch.long)
 
