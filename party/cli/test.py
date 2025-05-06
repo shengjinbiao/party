@@ -162,44 +162,43 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
         with KrakenProgressBar() as progress:
             file_prog = progress.add_task('Files', total=len(test_set))
             for input_file in test_set:
-                input_file = Path(input_file)
-
-                languages = None
-                if add_lang_token:
-                    for part in input_file.parts[::-1]:
-                        if (lang := LANG_TO_ISO.get(part, 'und')) != 'und':
-                            break
-                    languages = [lang]
-
                 try:
+                    input_file = Path(input_file)
+
+                    languages = None
+                    if add_lang_token:
+                        for part in input_file.parts[::-1]:
+                            if (lang := LANG_TO_ISO.get(part, 'und')) != 'und':
+                                break
+                        languages = [lang]
+
                     doc = XMLPage(input_file)
-                except ValueError:
-                    logger.warning(f'{doc} is not parseable.')
-                    continue
+                    
+                    im = Image.open(doc.imagename)
+                    bounds = doc.to_container()
+                    rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
+                    predictor = batched_pred(model=model,
+                                             im=im,
+                                             bounds=bounds,
+                                             fabric=fabric,
+                                             prompt_mode=curves,
+                                             languages=languages,
+                                             batch_size=batch_size)
 
-                im = Image.open(doc.imagename)
-                bounds = doc.to_container()
-                rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
-                predictor = batched_pred(model=model,
-                                         im=im,
-                                         bounds=bounds,
-                                         fabric=fabric,
-                                         prompt_mode=curves,
-                                         languages=languages,
-                                         batch_size=batch_size)
-
-                for pred, line in zip(predictor, bounds.lines):
-                    x = pred.prediction
-                    y = line.text
-                    logger.info(f'pred: {x}')
-                    chars += len(y)
-                    c, algn1, algn2 = global_align(y, x)
-                    algn_gt.extend(algn1)
-                    algn_pred.extend(algn2)
-                    error += c
-                    test_cer.update(x, y)
-                    test_wer.update(x, y)
-                    progress.update(rec_prog, advance=1)
+                    for pred, line in zip(predictor, bounds.lines):
+                        x = pred.prediction
+                        y = line.text
+                        logger.info(f'pred: {x}')
+                        chars += len(y)
+                        c, algn1, algn2 = global_align(y, x)
+                        algn_gt.extend(algn1)
+                        algn_pred.extend(algn2)
+                        error += c
+                        test_cer.update(x, y)
+                        test_wer.update(x, y)
+                        progress.update(rec_prog, advance=1)
+                except Exception:
+                    logger.warning(f'{input_file} failed to process.')
                 progress.update(file_prog, advance=1)
 
             confusions, scripts, ins, dels, subs = compute_confusions(algn_gt, algn_pred)
