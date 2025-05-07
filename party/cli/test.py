@@ -163,6 +163,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
             file_prog = progress.add_task('Files', total=len(test_set))
             for input_file in test_set:
                 try:
+                    rec_prog = progress.add_task(f'Processing {input_file}')
                     input_file = Path(input_file)
 
                     languages = None
@@ -173,10 +174,9 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                         languages = [lang]
 
                     doc = XMLPage(input_file)
-                    
+
                     im = Image.open(doc.imagename)
                     bounds = doc.to_container()
-                    rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
                     predictor = batched_pred(model=model,
                                              im=im,
                                              bounds=bounds,
@@ -196,9 +196,10 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                         error += c
                         test_cer.update(x, y)
                         test_wer.update(x, y)
-                        progress.update(rec_prog, advance=1)
+                        progress.update(rec_prog, advance=1, total=len(bounds.lines))
                 except Exception:
                     logger.warning(f'{input_file} failed to process.')
+                    progress.remove_task(rec_prog)
                 progress.update(file_prog, advance=1)
 
             confusions, scripts, ins, dels, subs = compute_confusions(algn_gt, algn_pred)
