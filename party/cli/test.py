@@ -177,6 +177,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
                     im = Image.open(doc.imagename)
                     bounds = doc.to_container()
+                    progress.update(rec_prog, total=len(bounds.lines))
                     predictor = batched_pred(model=model,
                                              im=im,
                                              bounds=bounds,
