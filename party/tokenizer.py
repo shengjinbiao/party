@@ -31,6 +31,7 @@ LANG_TO_ISO = {'arabic': 'ara',
                'catalan': 'cat',
                'chinese': 'cmn',
                'church_slavonic': 'chu',
+               'classical_armenian': 'xcl',
                'corsican': 'cos',
                'czech': 'ces',
                'german': 'deu',
@@ -119,7 +120,8 @@ ISO_TO_IDX = {'ara': 0,
               'slv': 42,
               'lit': 43,
               'pol': 44,
-              'gez': 45}
+              'gez': 45,
+              'xcl': 46}
 
 LANG_IDX_TO_ISO = {v: k for k, v in ISO_TO_IDX.items()}
 
