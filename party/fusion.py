@@ -498,6 +498,7 @@ class PartyModel(nn.Module):
         _prompt = torch.tensor(self.tokenizer.encode('', langs=languages, add_eos=False),
                                device=encoder_hidden_states.device,
                                dtype=torch.long).repeat(self._batch_size, 1)
+        _prompt_length = _prompt.size(1)
 
         eos_token = torch.tensor(self.tokenizer.eos_id, device=encoder_hidden_states.device, dtype=torch.long)
 
@@ -506,7 +507,7 @@ class PartyModel(nn.Module):
 
         # Mask is shape (batch_size, max_seq_len, image_embedding_len)
         encoder_mask = torch.ones((self._batch_size,
-                                   1,
+                                   _prompt_length,
                                    encoder_hidden_states.size(1)),
                                   dtype=torch.bool,
                                   device=encoder_hidden_states.device)
@@ -529,23 +530,23 @@ class PartyModel(nn.Module):
             exp_encoder_hidden_states = encoder_hidden_states[:bsz, ...] + line_embeds
 
             # prefill step
-            curr_masks = self._masks[:, :1]
+            curr_masks = self._masks[:, :_prompt_length]
             logits = self.forward(tokens=_prompt[:bsz, ...],
                                   encoder_hidden_states=exp_encoder_hidden_states,
                                   encoder_mask=encoder_mask[:bsz, ...],
                                   mask=curr_masks,
-                                  input_pos=self._input_pos[:, :1].squeeze())
+                                  input_pos=self._input_pos[:, :_prompt_length].squeeze())
             tokens = torch.argmax(logits, dim=-1)
             generated_tokens = [tokens[:, -1]]
 
-            curr_pos = 1
+            curr_pos = _prompt_length
 
             # keeps track of EOS tokens emitted by each sequence in a batch
             eos_token_reached = torch.zeros(bsz, dtype=torch.bool, device=encoder_hidden_states.device)
             eos_token_reached |= tokens[:, -1] == eos_token
 
             # mask used for setting all values from EOS token to pad_id in output sequences.
-            eos_token_mask = torch.ones(bsz, 0, dtype=torch.int32, device=encoder_hidden_states.device)
+            eos_token_mask = torch.ones((bsz, _prompt_length + 1), 0, dtype=torch.int32, device=encoder_hidden_states.device)
 
             if eos_token_reached.all():
                 break
