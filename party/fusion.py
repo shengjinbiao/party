@@ -15,7 +15,7 @@
 # limitations under the License.
 """Llama vision fusion model"""
 import logging
-from typing import Generator, Optional, Union, List, TYPE_CHECKING
+from typing import Generator, Optional, Union, List, Tuple, TYPE_CHECKING
 
 import json
 import torch
@@ -448,13 +448,6 @@ class PartyModel(nn.Module):
         self._max_generated_tokens = max_generated_tokens
         self._max_encoder_seq_len = max_encoder_seq_len
 
-        # generate a regular causal mask
-        self._masks = torch.tril(torch.ones(max_generated_tokens,
-                                            max_generated_tokens,
-                                            dtype=torch.bool,
-                                            device=device)).unsqueeze(0)
-        self._input_pos = torch.arange(0, max_generated_tokens, device=device).unsqueeze(0)
-
         # set up caches
         self.setup_caches(batch_size=batch_size,
                           encoder_max_seq_len=max_encoder_seq_len,
@@ -469,7 +462,7 @@ class PartyModel(nn.Module):
                        encoder_input: torch.FloatTensor,
                        curves: Optional[torch.FloatTensor] = None,
                        boxes: Optional[torch.FloatTensor] = None,
-                       languages: Optional[List[str]] = None) -> Generator[torch.Tensor, None, None]:
+                       languages: Optional[List[str]] = None) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
         """
         Predicts text from an input page image and a number of cubic Bézier
         curves.
@@ -481,10 +474,11 @@ class PartyModel(nn.Module):
             batch_size: Number of curves to generate text for simultaneously.
 
         Yields:
-            A tensor of integer labels with shape ``n x s`` where ``s` is the
-            length of the longest generated sequence or `max_generated_tokens`.
-            BOS and EOS have already been stripped from the token sequences.
-            Entries beyond the EOS are padded with zeroes.
+            One tensor of integer labels and one tensor of float confidences,
+            each with shape ``n x s`` where ``s` is the length of the longest
+            generated sequence or `max_generated_tokens`. BOS and EOS have
+            already been stripped from the token sequences. Entries beyond the
+            EOS are padded with zeroes.
         """
         if curves is not None and boxes is not None:
             raise ValueError('`curves` and `boxes` are mutually exclusive.')
@@ -494,23 +488,32 @@ class PartyModel(nn.Module):
         logger.info('Computing encoder embeddings')
 
         encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
+        device = encoder_hidden_states.device
 
         _prompt = torch.tensor(self.tokenizer.encode('', langs=languages, add_eos=False),
-                               device=encoder_hidden_states.device,
+                               device=device,
                                dtype=torch.long).repeat(self._batch_size, 1)
         _prompt_length = _prompt.size(1)
 
-        eos_token = torch.tensor(self.tokenizer.eos_id, device=encoder_hidden_states.device, dtype=torch.long)
+        eos_token = torch.tensor(self.tokenizer.eos_id, device=device, dtype=torch.long)
 
         line_pos = curves if curves is not None else boxes
         batches = torch.split(line_pos, self._batch_size)
+
+        total_response_length = _prompt_length + self._max_generated_tokens
+        # generate a regular causal mask
+        masks = torch.tril(torch.ones(total_response_length,
+                                      self._max_generated_tokens,
+                                      dtype=torch.bool,
+                                      device=device)).unsqueeze(0)
+        input_pos = torch.arange(0, total_response_length, device=device).unsqueeze(0)
 
         # Mask is shape (batch_size, max_seq_len, image_embedding_len)
         encoder_mask = torch.ones((self._batch_size,
                                    _prompt_length,
                                    encoder_hidden_states.size(1)),
                                   dtype=torch.bool,
-                                  device=encoder_hidden_states.device)
+                                  device=device)
 
         for batch_idx, batch in enumerate(batches):
             bsz = batch.size(0)
@@ -525,46 +528,54 @@ class PartyModel(nn.Module):
                                   decoder_max_seq_len=self._max_generated_tokens,
                                   dtype=next(self.encoder.parameters()).dtype)
 
+            logger.info('Adding line embeddings to encoder states.')
             # add line embeddings to encoder hidden states
             line_embeds = self.line_embedding(batch).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
             exp_encoder_hidden_states = encoder_hidden_states[:bsz, ...] + line_embeds
 
+            logger.info('Prefilling cache.')
             # prefill step
-            curr_masks = self._masks[:, :_prompt_length]
+            curr_masks = masks[:, :_prompt_length]
             logits = self.forward(tokens=_prompt[:bsz, ...],
                                   encoder_hidden_states=exp_encoder_hidden_states,
                                   encoder_mask=encoder_mask[:bsz, ...],
                                   mask=curr_masks,
-                                  input_pos=self._input_pos[:, :_prompt_length].squeeze())
-            tokens = torch.argmax(logits, dim=-1)
+                                  input_pos=input_pos[:, :_prompt_length].squeeze())
+            tokens = torch.argmax(logits, dim=-1)[:, -1:]
+            confs = logits[:, -1].softmax(-1)
             generated_tokens = [tokens[:, -1]]
-
+            generated_confidences = [confs.gather(-1, tokens).squeeze(1)]
+            logger.info(f'Generated {generated_tokens[-1]} with conf {generated_confidences[-1]}')
             curr_pos = _prompt_length
 
             # keeps track of EOS tokens emitted by each sequence in a batch
-            eos_token_reached = torch.zeros(bsz, dtype=torch.bool, device=encoder_hidden_states.device)
+            eos_token_reached = torch.zeros(bsz, dtype=torch.bool, device=device)
             eos_token_reached |= tokens[:, -1] == eos_token
 
             # mask used for setting all values from EOS token to pad_id in output sequences.
-            eos_token_mask = torch.ones((bsz, _prompt_length + 1), 0, dtype=torch.int32, device=encoder_hidden_states.device)
+            eos_token_mask = torch.ones(bsz, 0, dtype=torch.int32, device=device)
 
             if eos_token_reached.all():
                 break
 
             for _ in range(self._max_generated_tokens - 1):
+                logger.info('Generating...')
                 # update eos_token_mask if an EOS token was emitted in a previous step
                 eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(bsz, 1)], dim=-1)
 
-                curr_input_pos = self._input_pos[:, curr_pos]
-                curr_masks = self._masks[:, curr_pos, None, :]
+                curr_input_pos = input_pos[:, curr_pos]
+                curr_masks = masks[:, curr_pos, None, :]
 
                 # no need for encoder embeddings anymore as they're in the cache now
                 logits = self.forward(tokens=tokens.clone(),
                                       mask=curr_masks,
                                       input_pos=curr_input_pos)
                 tokens = torch.argmax(logits, dim=-1)
-                logger.info(f'Generated {tokens[:, -1]}')
+                confs = logits[:, -1].softmax(-1)
                 generated_tokens.append(tokens[:, -1])
+                generated_confidences.append(confs.gather(-1, tokens).squeeze(1))
+                logger.info(f'Generated {generated_tokens[-1]} with conf {generated_confidences[-1]}')
+
                 curr_pos += 1
 
                 eos_token_reached |= tokens[:, -1] == eos_token
@@ -575,9 +586,11 @@ class PartyModel(nn.Module):
 
             # mask out generated tokens beyond EOS token
             generated_tokens = torch.stack(generated_tokens).T
-            generated_tokens *= eos_token_mask
+            generated_confidences = torch.stack(generated_confidences).T
 
-            yield generated_tokens[..., :-1]
+            generated_tokens *= eos_token_mask
+            generated_confidences *= eos_token_mask
+            yield generated_tokens[..., :-1], generated_confidences[..., :-1]
 
     @torch.inference_mode
     def predict_string(self,
@@ -595,11 +608,10 @@ class PartyModel(nn.Module):
             languages: ISO693-3 identifiers of the languages of the lines.
 
         Yields:
-
         """
-        for preds in self.predict_tokens(encoder_input=encoder_input,
-                                         curves=curves,
-                                         boxes=boxes,
-                                         languages=languages):
-            for pred in preds:
-                yield self.tokenizer.decode(pred[pred != 0])
+        for preds, confs in self.predict_tokens(encoder_input=encoder_input,
+                                                curves=curves,
+                                                boxes=boxes,
+                                                languages=languages):
+            for pred, conf in zip(preds, confs):
+                yield self.tokenizer.decode_with_confs(pred[pred != 0], conf)

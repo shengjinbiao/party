@@ -152,18 +152,18 @@ class batched_pred(object):
                              bounds.lines)
 
     def __next__(self):
-        (pred_text, pred_langs), line = next(self._pred)
+        (pred_text, pred_confs, pred_langs), line = next(self._pred)
         line = replace(line, language=pred_langs)
         if self.prompt_mode == 'curves':
             return BaselineOCRRecord(prediction=pred_text,
                                      cuts=tuple(),
-                                     confidences=tuple(),
+                                     confidences=pred_confs,
                                      line=line,
                                      display_order=False)
         else:
             return BBoxOCRRecord(prediction=pred_text,
                                  cuts=tuple(),
-                                 confidences=tuple(),
+                                 confidences=pred_confs,
                                  line=_baseline_to_bbox(line),
                                  display_order=False)
 

@@ -15,12 +15,15 @@
 
 """
 """
+import codecs
 import logging
+
+from statistics import fmean
 
 from typing import List, TYPE_CHECKING, Optional, Set, Tuple
 
 if TYPE_CHECKING:
-    from torch import IntTensor
+    from torch import IntTensor, FloatTensor
 
 __all__ = ['OctetTokenizer']
 
@@ -193,7 +196,7 @@ class OctetTokenizer(object):
         return tokens
 
     def decode(self, ids: 'IntTensor') -> Tuple[str, Set[str]]:
-        """Decode token IDs to strings.
+        """Decode a sequence of token IDs into a string and language tags.
 
         Args:
             ids: The input token IDs to be decoded.
@@ -206,3 +209,37 @@ class OctetTokenizer(object):
         lang_ids = set(LANG_IDX_TO_ISO.get(id - LANG_OFFSET, 'und') for id in ids if id >= LANG_OFFSET)
         text = bytes(ids).decode("utf-8", errors="ignore")
         return text, lang_ids
+
+    def decode_with_confs(self,
+                          ids: 'IntTensor',
+                          confidences: 'FloatTensor') -> Tuple[str, List[float], Set[str]]:
+        """Decode a sequence of token IDs into a string, computing average
+        confidence scores for each Unicode code point, and extracting any
+        contained language tags.
+
+        Args:
+            ids: The input token IDs to be decoded.
+            confidneces: The normalized confidence scores for each output token.
+
+        Returns:
+            A tuple containing the decoded text, confidences for each code
+            points, and any language tags in the input tensor.
+        """
+        ids = [id - OFFSET for id in ids if OFFSET <= id < LANG_OFFSET]
+        lang_ids = set(LANG_IDX_TO_ISO.get(id - LANG_OFFSET, 'und') for id in ids if id >= LANG_OFFSET)
+        decoder = codecs.getincrementaldecoder('utf-8')(errors='strict')
+        cs = []
+        confs = []
+        ics = []
+        confidences = confidences.tolist()
+        for id, conf in zip((id.to_bytes() for id in bytes(ids)), confidences):
+            try:
+                c = decoder.decode(id)
+                ics.append(conf)
+                if c:
+                    cs.append(c)
+                    confs.append(fmean(ics))
+                    ics = []
+            except UnicodeDecodeError as e:
+                logger.info(f'Unexpected byte value in token tensor: {e}')
+        return ''.join(cs), confs, lang_ids
