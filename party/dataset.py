@@ -567,6 +567,7 @@ class TestBaselineDataset(Dataset):
         return im, Segmentation(type=lines[0].type,
                                 imagename='default.jpg',
                                 script_detection=False,
+                                text_direction='horizontal-lr',
                                 lines=lines,
                                 language=[lang] if self.add_lang_token else [])
 
