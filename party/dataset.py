@@ -548,7 +548,7 @@ class TestBaselineDataset(Dataset):
                 self.max_seq_len = max(int.from_bytes(raw_metadata[b'max_octets_in_line'], 'little'), self.max_seq_len)
 
     def __len__(self):
-        return len(self.ds_table)
+        return len(self.arrow_table)
 
     def __getitem__(self, index: int) -> Tuple[Image.Image, 'Segmentation']:
         from kraken.containers import Segmentation, BaselineLine, BBoxLine
