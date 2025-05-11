@@ -89,8 +89,6 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     from lightning.fabric import Fabric
 
     try:
-        from kraken.serialization import render_report
-        from kraken.lib.dataset import compute_script_cer_from_algn, global_align
         from kraken.lib.progress import KrakenProgressBar, KrakenDownloadProgressBar
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
@@ -99,6 +97,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
     from party.fusion import PartyModel
     from party.pred import batched_pred
+    from party.report  import render_report, global_align, compute_script_cer_from_algn
     from party.dataset import TestBaselineDataset
     torch.set_float32_matmul_precision('medium')
 

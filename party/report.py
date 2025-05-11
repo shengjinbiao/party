@@ -1,0 +1,216 @@
+#
+# Copyright 2025 Benjamin Kiessling
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+# or implied. See the License for the specific language governing
+# permissions and limitations under the License.
+import json
+import logging
+import unicodedata
+from typing import Any, Dict, List, Sequence, Tuple
+
+from rich import print
+from rich.table import Table
+from collections import Counter
+from importlib import resources
+
+from party.tokenizer import ISO_TO_LANG
+
+logger = logging.getLogger(__name__)
+
+__all__ = ['render_report']
+
+
+def is_printable(char: str) -> bool:
+    """
+    Determines if a chode point is printable/visible when printed.
+
+    Args:
+        char (str): Input code point.
+
+    Returns:
+        True if printable, False otherwise.
+    """
+    letters = ('LC', 'Ll', 'Lm', 'Lo', 'Lt', 'Lu')
+    numbers = ('Nd', 'Nl', 'No')
+    punctuation = ('Pc', 'Pd', 'Pe', 'Pf', 'Pi', 'Po', 'Ps')
+    symbol = ('Sc', 'Sk', 'Sm', 'So')
+    printable = letters + numbers + punctuation + symbol
+
+    return unicodedata.category(char) in printable
+
+
+def make_printable(char: str) -> str:
+    """
+    Takes a Unicode code point and return a printable representation of it.
+
+    Args:
+        char (str): Input code point
+
+    Returns:
+        Either the original code point, the name of the code point if it is a
+        combining mark, whitespace etc., or the hex code if it is a control
+        symbol.
+    """
+    if not char or is_printable(char):
+        return char
+    elif unicodedata.category(char) in ('Cc', 'Cs', 'Co'):
+        return '0x{:x}'.format(ord(char))
+    else:
+        try:
+            return unicodedata.name(char)
+        except ValueError:
+            return '0x{:x}'.format(ord(char))
+
+
+def render_report(model: str,
+                  micro_cer: float,
+                  micro_wer: float,
+                  micro_ci_cer: float,
+                  micro_ci_wer: float,
+                  per_lang_cer: Dict[str, float],
+                  per_lang_wer: Dict[str, float],
+                  per_lang_ci_cer: Dict[str, float],
+                  per_lang_ci_wer: Dict[str, float],
+                  per_script_cer: Dict[str, float],
+                  per_script_ci_cer: Dict[str, float]):
+    """
+    Renders an accuracy report.
+
+    Args:
+
+
+    """
+    table = Table(title=model, show_header=False)
+    for i in ['', 'CER', 'WER', 'CER (case insensitive)', 'WER (case insensitive)', 'CER (macro)', 'WER (macro)', 'CER (ci, macro)', 'WER (ci, macro)']:
+        table.add_column(i, justify='left', no_wrap=True)
+    lang_metrics = {}
+    macro_cer = 0
+    macro_wer = 0
+    macro_ci_cer = 0
+    macro_ci_wer = 0
+    for lang in per_lang_cer.keys():
+        la = (per_lang_cer[lang].compute(),
+              per_lang_wer[lang].compute(),
+              per_lang_ci_cer[lang].compute(),
+              per_lang_ci_wer[lang].compute())
+        macro_cer += la[0]
+        macro_wer += la[1]
+        macro_ci_cer += la[2]
+        macro_ci_wer += la[3]
+        lang_metrics[lang] = la
+    macro_cer /= len(lang_metrics)
+    macro_wer /= len(lang_metrics)
+    macro_ci_cer /= len(lang_metrics)
+    macro_ci_wer /= len(lang_metrics)
+
+    table.add_row('global', micro_cer, micro_wer, micro_ci_cer, micro_ci_wer, macro_cer, macro_wer, macro_ci_cer, macro_ci_wer, end_section=True)
+    table.add_row('Languages', end_section=True)
+    for lang, metrics in lang_metrics.items():
+        table.add_row(ISO_TO_LANG[lang], metrics[0], metrics[1], metrics[2], metrics[3], '-', '-', '-', '-')
+    table.end_section()
+    table.add_row('Scripts', end_section=True)
+    for script in per_script_cer.keys():
+        table.add_row(script, per_script_cer[script], per_script_ci_cer[script], '-', '-', '-', '-', '-', '-')
+    print(table)
+
+
+def global_align(seq1: Sequence[Any], seq2: Sequence[Any]) -> Tuple[int, List[str], List[str]]:
+    """
+    Computes a global alignment of two strings.
+
+    Args:
+        seq1 (Sequence[Any]):
+        seq2 (Sequence[Any]):
+
+    Returns a tuple (distance, list(algn1), list(algn2))
+    """
+    # calculate cost and direction matrix
+    cost = [[0] * (len(seq2) + 1) for x in range(len(seq1) + 1)]
+    for i in range(1, len(cost)):
+        cost[i][0] = i
+    for i in range(1, len(cost[0])):
+        cost[0][i] = i
+    direction = [[(0, 0)] * (len(seq2) + 1) for x in range(len(seq1) + 1)]
+    direction[0] = [(0, x) for x in range(-1, len(seq2))]
+    for i in range(-1, len(direction) - 1):
+        direction[i + 1][0] = (i, 0)
+    for i in range(1, len(cost)):
+        for j in range(1, len(cost[0])):
+            delcost = ((i - 1, j), cost[i - 1][j] + 1)
+            addcost = ((i, j - 1), cost[i][j - 1] + 1)
+            subcost = ((i - 1, j - 1), cost[i - 1][j - 1] + (seq1[i - 1] != seq2[j - 1]))
+            best = min(delcost, addcost, subcost, key=lambda x: x[1])
+            cost[i][j] = best[1]
+            direction[i][j] = best[0]
+    d = cost[-1][-1]
+    # backtrace
+    algn1: List[Any] = []
+    algn2: List[Any] = []
+    i = len(direction) - 1
+    j = len(direction[0]) - 1
+    while direction[i][j] != (-1, 0):
+        k, m = direction[i][j]
+        if k == i - 1 and m == j - 1:
+            algn1.insert(0, seq1[i - 1])
+            algn2.insert(0, seq2[j - 1])
+        elif k < i:
+            algn1.insert(0, seq1[i - 1])
+            algn2.insert(0, '')
+        elif m < j:
+            algn1.insert(0, '')
+            algn2.insert(0, seq2[j - 1])
+        i, j = k, m
+    return d, algn1, algn2
+
+
+def compute_script_cer_from_algn(algn1: Sequence[str], algn2: Sequence[str]) -> Dict[str, float]:
+    """
+    Compute confusion matrices from two globally aligned strings.
+
+    Args:
+        align1 (Sequence[str]): sequence 1
+        align2 (Sequence[str]): sequence 2
+
+    Returns:
+        A tuple (counts, scripts, ins, dels, subs) with `counts` being per-character
+        confusions, `scripts` per-script counts, `ins` a dict with per script
+        insertions, `del` an integer of the number of deletions, `subs` per
+        script substitutions.
+    """
+    counts: Dict[Tuple[str, str], int] = Counter()
+    ref = resources.files(__name__).joinpath('scripts.json')
+    with ref.open('rb') as fp:
+        script_map = json.load(fp)
+
+    def _get_script(c):
+        for s, e, n in script_map:
+            if ord(c) == s or (e and s <= ord(c) <= e):
+                return n
+        return 'Unknown'
+
+    scripts: Dict[Tuple[str, str], int] = Counter()
+    ins: Dict[Tuple[str, str], int] = Counter()
+    dels: int = 0
+    subs: Dict[Tuple[str, str], int] = Counter()
+    for u, v in zip(algn1, algn2):
+        counts[(u, v)] += 1
+    for k, v in counts.items():
+        if k[0] == '':
+            dels += v
+        else:
+            script = _get_script(k[0])
+            scripts[script] += v
+            if k[1] == '':
+                ins[script] += v
+            elif k[0] != k[1]:
+                subs[script] += v
+    return {k: (v-(ins[k] + subs[k]))/v for k, v in scripts.items()}
