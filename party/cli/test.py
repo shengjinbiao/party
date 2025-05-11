@@ -209,7 +209,8 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
         per_script_cer = compute_script_cer_from_algn(algn_gt, algn_pred)
         per_script_ci_cer = compute_script_cer_from_algn(algn_ci_gt, algn_ci_pred)
 
-        render_report(micro_test_cer,
+        render_report(load_from_file,
+                      micro_test_cer,
                       micro_test_wer,
                       micro_test_ci_cer,
                       micro_test_ci_wer,
