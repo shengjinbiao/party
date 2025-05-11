@@ -127,6 +127,7 @@ ISO_TO_IDX = {'ara': 0,
               'xcl': 46}
 
 LANG_IDX_TO_ISO = {v: k for k, v in ISO_TO_IDX.items()}
+ISO_TO_LANG = {v: k for k, v in LANG_TO_ISO.items()}
 
 OFFSET = 3
 LANG_OFFSET = OFFSET + 256

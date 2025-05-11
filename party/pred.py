@@ -25,7 +25,7 @@ from dataclasses import asdict, replace
 
 from kraken.containers import BBoxOCRRecord, BaselineOCRRecord, BBoxLine
 
-from typing import TYPE_CHECKING, Union, Tuple, Optional, Literal, Generator, List
+from typing import TYPE_CHECKING, Union, Tuple, Optional, Literal, Generator
 
 from party.dataset import get_default_transforms, _to_curve, _to_bbox
 
@@ -80,7 +80,6 @@ class batched_pred(object):
         im: Pillow image
         bounds: Segmentation for input image
         fabric: Fabric context manager to cast models and tensors.
-        languages: ISO693-3 identifiers of the languages in the page.
         prompt_mode: How to embed line positional prompts. Per default prompts
                      are determined by the segmentation type if the model
                      indicates either curves or boxes are supported. If the
@@ -90,6 +89,8 @@ class batched_pred(object):
                      and the segmentation is of bounding box-type an exception
                      will be raised. If explicit values are set.
         batch_size: Number of lines to predict in parallel
+        add_lang_token: Adds language tokens taken from the page level
+                        `Segmentation` language field.
 
     Yields:
         An ocr_record containing the recognized text, dummy character
@@ -103,9 +104,9 @@ class batched_pred(object):
                  im: 'Image.Image',
                  bounds: 'Segmentation',
                  fabric: 'Fabric',
-                 languages: Optional[List[str]] = None,
                  prompt_mode: Optional[Literal['curves', 'boxes']] = None,
-                 batch_size: int = 2) -> Generator['ocr_record', None, None]:
+                 batch_size: int = 2,
+                 add_lang_token: bool = True) -> Generator['ocr_record', None, None]:
         m_prompt_mode = model.line_prompt_mode
         s_prompt_mode = bounds.type
 
@@ -148,7 +149,7 @@ class batched_pred(object):
             self._pred = zip(model.predict_string(encoder_input=image_input,
                                                   curves=lines if self.prompt_mode == 'curves' else None,
                                                   boxes=lines if self.prompt_mode == 'boxes' else None,
-                                                  languages=languages),
+                                                  languages=bounds.language if add_lang_token else None),
                              bounds.lines)
 
     def __next__(self):

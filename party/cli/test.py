@@ -68,7 +68,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
          workers, normalization, normalize_whitespace, curves,
          compile, quantize, add_lang_token, test_set):
     """
-    Tests a model on XML input data.
+    Tests a model on a compiled dataset.
     """
     if load_from_file and load_from_repo:
         raise click.BadOptionUsage('load_from_file', 'load_from_* options are mutually exclusive.')
@@ -83,27 +83,23 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     import torch
 
     from PIL import Image
-    from pathlib import Path
     from htrmopo import get_model
+    from collections import defaultdict
     from threadpoolctl import threadpool_limits
     from lightning.fabric import Fabric
 
-    from rich import print
-
     try:
-        from kraken.lib.xml import XMLPage
         from kraken.serialization import render_report
-        from kraken.lib.dataset import compute_confusions, global_align
+        from kraken.lib.dataset import compute_script_cer_from_algn, global_align
         from kraken.lib.progress import KrakenProgressBar, KrakenDownloadProgressBar
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
 
     from torchmetrics.text import CharErrorRate, WordErrorRate
 
-    from party.pred import batched_pred
     from party.fusion import PartyModel
-    from party.tokenizer import LANG_TO_ISO
-
+    from party.pred import batched_pred
+    from party.dataset import TestBaselineDataset
     torch.set_float32_matmul_precision('medium')
 
     if load_from_repo:
@@ -132,6 +128,10 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                     devices=device,
                     precision=ctx.meta['precision'])
 
+    ds = TestBaselineDataset(files=test_set,
+                             prompt_mode=curves,
+                             add_lang_token=add_lang_token)
+
     with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']), fabric.init_tensor(), fabric.init_module():
 
         model = PartyModel.from_safetensors(load_from_file)
@@ -153,66 +153,70 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
         algn_gt: List[str] = []
         algn_pred: List[str] = []
-        chars = 0
-        error = 0
+        algn_ci_gt: List[str] = []
+        algn_ci_pred: List[str] = []
 
-        test_cer = CharErrorRate()
-        test_wer = WordErrorRate()
+        micro_test_cer = CharErrorRate()
+        micro_test_wer = WordErrorRate()
+        micro_test_ci_cer = CharErrorRate()
+        micro_test_ci_wer = WordErrorRate()
+
+        per_lang_cer = defaultdict(CharErrorRate)
+        per_lang_wer = defaultdict(WordErrorRate)
+        per_lang_ci_cer = defaultdict(CharErrorRate)
+        per_lang_ci_wer = defaultdict(WordErrorRate)
 
         with KrakenProgressBar() as progress:
-            file_prog = progress.add_task('Files', total=len(test_set))
-            for input_file in test_set:
+            file_prog = progress.add_task('Files', total=len(ds))
+            for sample in ds:
                 try:
-                    rec_prog = progress.add_task(f'Processing {input_file}')
-                    input_file = Path(input_file)
-
-                    languages = None
-                    if add_lang_token:
-                        for part in input_file.parts[::-1]:
-                            if (lang := LANG_TO_ISO.get(part, 'und')) != 'und':
-                                break
-                        languages = [lang]
-
-                    doc = XMLPage(input_file)
-
-                    im = Image.open(doc.imagename)
-                    bounds = doc.to_container()
+                    rec_prog = progress.add_task('Processing sample')
+                    im = Image.open(sample[0])
+                    bounds = sample[1]
                     progress.update(rec_prog, total=len(bounds.lines))
                     predictor = batched_pred(model=model,
                                              im=im,
                                              bounds=bounds,
                                              fabric=fabric,
                                              prompt_mode=curves,
-                                             languages=languages,
-                                             batch_size=batch_size)
+                                             batch_size=batch_size,
+                                             add_lang_token=add_lang_token)
 
                     for pred, line in zip(predictor, bounds.lines):
                         x = pred.prediction
                         y = line.text
-                        logger.info(f'pred: {x}')
-                        chars += len(y)
-                        c, algn1, algn2 = global_align(y, x)
-                        algn_gt.extend(algn1)
-                        algn_pred.extend(algn2)
-                        error += c
-                        test_cer.update(x, y)
-                        test_wer.update(x, y)
+                        logger.info(f'pred: {x}\ngt: {y}')
+                        algn_s_gt, algn_s_pred = global_align(x, y)
+                        algn_gt.extend(algn_s_gt)
+                        algn_pred.extend(algn_s_pred)
+                        algn_s_gt, algn_s_pred = global_align(x.lower(), y.lower())
+                        algn_ci_gt.extend(algn_s_gt)
+                        algn_ci_pred.extend(algn_s_pred)
+                        micro_test_cer.update(x, y)
+                        micro_test_wer.update(x, y)
+                        micro_test_ci_cer.update(x.lower(), y.lower())
+                        micro_test_ci_wer.update(x.lower(), y.lower())
+                        for lang in bounds.language:
+                            per_lang_cer[lang].update(x, y)
+                            per_lang_wer[lang].update(x, y)
+                            per_lang_ci_cer[lang].update(x.lower(), y.lower())
+                            per_lang_ci_wer[lang].update(x.lower(), y.lower())
                         progress.update(rec_prog, advance=1, total=len(bounds.lines))
                 except Exception:
-                    logger.warning(f'{input_file} failed to process.')
+                    logger.warning('Sample failed to process.')
                     progress.remove_task(rec_prog)
                 progress.update(file_prog, advance=1)
 
-            confusions, scripts, ins, dels, subs = compute_confusions(algn_gt, algn_pred)
-            rep = render_report(load_from_file,
-                                chars,
-                                error,
-                                1.0 - test_cer.compute(),
-                                1.0 - test_wer.compute(),
-                                confusions,
-                                scripts,
-                                ins,
-                                dels,
-                                subs)
-            logger.info(rep)
-        print(rep)
+        per_script_cer = compute_script_cer_from_algn(algn_gt, algn_pred)
+        per_script_ci_cer = compute_script_cer_from_algn(algn_ci_gt, algn_ci_pred)
+
+        render_report(micro_test_cer,
+                      micro_test_wer,
+                      micro_test_ci_cer,
+                      micro_test_ci_wer,
+                      per_lang_cer,
+                      per_lang_wer,
+                      per_lang_ci_cer,
+                      per_lang_ci_wer,
+                      per_script_cer,
+                      per_script_ci_cer)

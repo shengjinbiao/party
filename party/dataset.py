@@ -45,6 +45,7 @@ from party.tokenizer import OctetTokenizer, LANG_TO_ISO
 
 if TYPE_CHECKING:
     from os import PathLike
+    from kraken.containers import Segmentation
 
 __all__ = ['TextLineDataModule']
 
@@ -506,6 +507,68 @@ class ValidationBaselineDataset(IterableDataset):
                        'boxes': boxes,
                        'curves': curves,
                        'tokens': tokens}
+
+
+class TestBaselineDataset(Dataset):
+    """
+    Dataset for validation.
+
+    Args:
+        im_transforms: Function taking an PIL.Image and returning a tensor
+                       suitable for forward passes.
+        prompt_mode: Select line prompt sampling mode: `boxes` for bbox-only,
+                     `curves` for curves-only, and `both` for randomly
+                     switching between the two.
+        add_lang_tokens: Returns language tokens with the samples.
+    """
+    def __init__(self,
+                 files: Sequence[Union[str, 'PathLike']],
+                 prompt_mode: Literal['boxes', 'curves'] = 'curves',
+                 add_lang_token: bool = False,
+                 batch_size: int = 32) -> None:
+        super().__init__()
+        self.files = files
+        self.prompt_mode = prompt_mode
+        self.add_lang_token = add_lang_token
+        self.batch_size = batch_size
+        self.max_seq_len = 0
+
+        self.arrow_table = None
+
+        for file in files:
+            with pa.memory_map(file, 'rb') as source:
+                ds_table = pa.ipc.open_file(source).read_all()
+                raw_metadata = ds_table.schema.metadata
+                if not raw_metadata or b'num_lines' not in raw_metadata:
+                    raise ValueError(f'{file} does not contain a valid metadata record.')
+                if not self.arrow_table:
+                    self.arrow_table = ds_table
+                else:
+                    self.arrow_table = pa.concat_tables([self.arrow_table, ds_table])
+                self.max_seq_len = max(int.from_bytes(raw_metadata[b'max_octets_in_line'], 'little'), self.max_seq_len)
+
+    def __len__(self):
+        return len(self.ds_table)
+
+    def __getitem__(self, index: int) -> Tuple[Image.Image, 'Segmentation']:
+        from kraken.containers import Segmentation, BaselineLine, BBoxLine
+
+        item = self.arrow_table.column('pages')[index].as_py()
+        im, lang, page_data = item['im'], item['lang'], item['lines']
+        im = Image.open(io.BytesIO(im)).convert('RGB')
+
+        if self.prompt_mode == 'curves':
+            lines = [BaselineLine(id='_foo',
+                                  baseline=line['curve'],
+                                  boundary=[],
+                                  text=line['text']) for line in page_data]
+        elif self.prompt_mode == 'boxes':
+            lines = [BBoxLine(id='_foo', bbox=line['bbox'], text=line['text']) for line in page_data]
+        return im, Segmentation(type=lines[0].type,
+                                imagename='default.jpg',
+                                script_detection=False,
+                                lines=lines,
+                                language=[lang] if self.add_lang_token else [])
 
 
 # magic lsq cubic bezier fit function from the internet.
