@@ -197,6 +197,16 @@ class RecognitionModel(L.LightningModule):
         module.model.train()
         return module
 
+    @classmethod
+    def load_from_safetensors(cls, file=None, *args, **kwargs):
+        """
+        Loads weights from a huggingface hub repository.
+        """
+        module = cls(*args, **kwargs, pretrained=False)
+        module.model = PartyModel.from_safetensors(file)
+        module.model.train()
+        return module
+
     def configure_callbacks(self):
         callbacks = []
         if self.hparams.quit == 'early':

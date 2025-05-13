@@ -127,7 +127,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                     precision=ctx.meta['precision'])
 
     ds = TestBaselineDataset(files=test_set,
-                             prompt_mode=curves):
+                             prompt_mode=curves)
 
     with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']), fabric.init_tensor(), fabric.init_module():
 
