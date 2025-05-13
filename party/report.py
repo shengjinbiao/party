@@ -81,14 +81,14 @@ def _render_metric(metric: Union[float, str]) -> str:
 def render_report(model: str,
                   micro_cer: float,
                   micro_wer: float,
-                  micro_ci_cer: float,
-                  micro_ci_wer: float,
+                  page_macro_cer: float,
+                  page_macro_wer: float,
                   per_lang_cer: Dict[str, float],
                   per_lang_wer: Dict[str, float],
-                  per_lang_ci_cer: Dict[str, float],
-                  per_lang_ci_wer: Dict[str, float],
+                  per_lang_page_macro_cer: Dict[str, float],
+                  per_lang_page_macro_wer: Dict[str, float],
                   per_script_cer: Dict[str, float],
-                  per_script_ci_cer: Dict[str, float]):
+                  per_script_page_macro_cer: Dict[str, float]):
     """
     Renders an accuracy report.
 
@@ -98,47 +98,37 @@ def render_report(model: str,
     """
     print(f'Model: {model}')
     table = Table(title='Global metrics', show_header=True, expand=True)
-    for i in ['CER', 'WER', 'CER (case insensitive)', 'WER (case insensitive)', 'CER (macro)', 'WER (macro)', 'CER (ci, macro)', 'WER (ci, macro)']:
+    for i in ['CER', 'WER', 'CER (macro lang)', 'WER (macro lang)', 'CER (macro page)', 'WER (macro page)']:
         table.add_column(i, justify='left', no_wrap=True)
     lang_metrics = {}
     if len(per_lang_cer) > 0:
         macro_cer = 0
         macro_wer = 0
-        macro_ci_cer = 0
-        macro_ci_wer = 0
         for lang in per_lang_cer.keys():
             la = (per_lang_cer[lang],
                   per_lang_wer[lang],
-                  per_lang_ci_cer[lang],
-                  per_lang_ci_wer[lang])
+                  per_lang_page_macro_cer[lang],
+                  per_lang_page_macro_wer[lang])
             macro_cer += la[0]
             macro_wer += la[1]
-            macro_ci_cer += la[2]
-            macro_ci_wer += la[3]
             lang_metrics[lang] = la
         macro_cer /= (len(lang_metrics) / 100.)
         macro_wer /= (len(lang_metrics) / 100.)
-        macro_ci_cer /= (len(lang_metrics) / 100.)
-        macro_ci_wer /= (len(lang_metrics) / 100.)
     else:
         macro_cer = '-'
         macro_wer = '-'
-        macro_ci_cer = '-'
-        macro_ci_wer = '-'
 
     table.add_row(_render_metric(100*micro_cer),
                   _render_metric(100*micro_wer),
-                  _render_metric(100*micro_ci_cer),
-                  _render_metric(100*micro_ci_wer),
                   _render_metric(macro_cer),
                   _render_metric(macro_wer),
-                  _render_metric(macro_ci_cer),
-                  _render_metric(macro_ci_wer))
+                  _render_metric(page_macro_cer),
+                  _render_metric(page_macro_wer))
     print(table)
 
     if len(per_lang_cer) > 0:
         table = Table(title='Languages', show_header=True, expand=True)
-        for i in ['', 'CER', 'WER', 'CER (case insensitive)', 'WER (case insensitive)']:
+        for i in ['', 'CER', 'WER', 'CER (macro page)', 'WER (macro page)']:
             table.add_column(i, justify='left', no_wrap=True)
         for lang, metrics in sorted(lang_metrics.items(), key=lambda x: x[1]):
 
@@ -149,12 +139,13 @@ def render_report(model: str,
                           _render_metric(100*metrics[3]))
         print(table)
     table = Table(title='Scripts', show_header=True, expand=True)
-    for i in ['', 'CER', 'CER (case insensitive)']:
+    for i in ['', 'CER', 'CER (macro page)']:
         table.add_column(i, justify='left', no_wrap=True)
     for script, _ in sorted(per_script_cer.items(), key=lambda x: x[1], reverse=True):
         table.add_row(script,
                       _render_metric((1.0-per_script_cer[script]) * 100),
-                      _render_metric((1.0-per_script_ci_cer[script]) * 100))
+                      _render_metric((1.0-per_script_page_macro_cer[script]) * 100))
+
     print(table)
 
 

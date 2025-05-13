@@ -87,6 +87,8 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     from threadpoolctl import threadpool_limits
     from lightning.fabric import Fabric
 
+    from statistics import fmean
+
     try:
         from kraken.lib.progress import KrakenProgressBar, KrakenDownloadProgressBar
     except ImportError:
@@ -150,18 +152,21 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
         algn_gt: List[str] = []
         algn_pred: List[str] = []
-        algn_ci_gt: List[str] = []
-        algn_ci_pred: List[str] = []
 
+        # overall metrics
         micro_test_cer = CharErrorRate()
         micro_test_wer = WordErrorRate()
-        micro_test_ci_cer = CharErrorRate()
-        micro_test_ci_wer = WordErrorRate()
 
-        per_lang_cer = defaultdict(CharErrorRate)
-        per_lang_wer = defaultdict(WordErrorRate)
-        per_lang_ci_cer = defaultdict(CharErrorRate)
-        per_lang_ci_wer = defaultdict(WordErrorRate)
+        page_macro_test_cer = []
+        page_macro_test_wer = []
+
+        per_lang_micro_cer = defaultdict(CharErrorRate)
+        per_lang_micro_wer = defaultdict(WordErrorRate)
+
+        per_lang_page_macro_cer = defaultdict(list)
+        per_lang_page_macro_wer = defaultdict(list)
+
+        per_script_page_macro_cer = defaultdict(list)
 
         with KrakenProgressBar() as progress:
             file_prog = progress.add_task('Files', total=len(ds))
@@ -178,49 +183,73 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                                                   batch_size=batch_size,
                                                   add_lang_token=add_lang_token)
 
+                    page_cer = CharErrorRate()
+                    page_wer = CharErrorRate()
+
+                    lang_page_cer = defaultdict(CharErrorRate)
+                    lang_page_wer = defaultdict(WordErrorRate)
+
+                    page_algn_gt: List[str] = []
+                    page_algn_pred: List[str] = []
+
                     for pred, line in zip(predictor, bounds.lines):
                         x = pred.prediction
                         y = line.text
                         logger.info(f'pred: {x}\ngt: {y}')
                         algn_s_gt, algn_s_pred = global_align(x, y)
-                        algn_gt.extend(algn_s_gt)
-                        algn_pred.extend(algn_s_pred)
-                        algn_s_gt, algn_s_pred = global_align(x.lower(), y.lower())
-                        algn_ci_gt.extend(algn_s_gt)
-                        algn_ci_pred.extend(algn_s_pred)
+                        page_algn_gt.extend(algn_s_gt)
+                        page_algn_pred.extend(algn_s_pred)
                         micro_test_cer.update(x, y)
                         micro_test_wer.update(x, y)
-                        micro_test_ci_cer.update(x.lower(), y.lower())
-                        micro_test_ci_wer.update(x.lower(), y.lower())
+                        page_cer.update(x, y)
+                        page_wer.update(x, y)
                         if bounds.language:
                             for lang in bounds.language:
-                                per_lang_cer[lang].update(x, y)
-                                per_lang_wer[lang].update(x, y)
-                                per_lang_ci_cer[lang].update(x.lower(), y.lower())
-                                per_lang_ci_wer[lang].update(x.lower(), y.lower())
+                                per_lang_micro_cer[lang].update(x, y)
+                                per_lang_micro_wer[lang].update(x, y)
+                                lang_page_cer[lang].update(x, y)
+                                lang_page_wer[lang].update(x, y)
                         progress.update(rec_prog, advance=1, total=len(bounds.lines))
+                    algn_gt.extend(page_algn_gt)
+                    algn_pred.extend(page_algn_pred)
+
+                    for k, v in compute_script_cer_from_algn(algn_gt, algn_pred).items():
+                        per_script_page_macro_cer[k].append(v)
+
+                    for lang in lang_page_cer.keys():
+                        per_lang_page_macro_cer[lang].append(float(lang_page_cer[lang].compute()))
+                        per_lang_page_macro_wer[lang].append(float(lang_page_wer[lang].compute()))
+                    page_macro_test_cer.append(float(page_cer.compute()))
+                    page_macro_test_wer.append(float(page_wer.compute()))
                 except Exception:
                     raise
                     logger.warning('Sample failed to process.')
                     progress.remove_task(rec_prog)
                 progress.update(file_prog, advance=1)
 
-        per_lang_cer = {k: float(v.compute()) for k, v in per_lang_cer.items()}
-        per_lang_wer = {k: float(v.compute()) for k, v in per_lang_wer.items()}
-        per_lang_ci_cer = {k: float(v.compute()) for k, v in per_lang_ci_cer.items()}
-        per_lang_ci_wer = {k: float(v.compute()) for k, v in per_lang_ci_wer.items()}
+        per_lang_micro_cer = {k: float(v.compute()) for k, v in per_lang_micro_cer.items()}
+        per_lang_micro_wer = {k: float(v.compute()) for k, v in per_lang_micro_wer.items()}
+
+        for lang in per_lang_micro_cer.keys():
+            per_lang_page_macro_cer[lang] = fmean(per_lang_page_macro_cer[lang])
+            per_lang_page_macro_wer[lang] = fmean(per_lang_page_macro_wer[lang])
+
+        page_macro_test_cer = fmean(page_macro_test_cer)
+        page_macro_test_wer = fmean(page_macro_test_wer)
 
         per_script_cer = compute_script_cer_from_algn(algn_gt, algn_pred)
-        per_script_ci_cer = compute_script_cer_from_algn(algn_ci_gt, algn_ci_pred)
+
+        for k, v in per_script_page_macro_cer.items():
+            per_script_page_macro_cer[k] = fmean(v)
 
         render_report(load_from_file,
                       float(micro_test_cer.compute()),
                       float(micro_test_wer.compute()),
-                      float(micro_test_ci_cer.compute()),
-                      float(micro_test_ci_wer.compute()),
-                      per_lang_cer,
-                      per_lang_wer,
-                      per_lang_ci_cer,
-                      per_lang_ci_wer,
+                      page_macro_test_cer,
+                      page_macro_test_wer,
+                      per_lang_micro_cer,
+                      per_lang_micro_wer,
+                      per_lang_page_macro_cer,
+                      per_lang_page_macro_wer,
                       per_script_cer,
-                      per_script_ci_cer)
+                      per_script_page_macro_cer)
