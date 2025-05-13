@@ -184,7 +184,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                                                   add_lang_token=add_lang_token)
 
                     page_cer = CharErrorRate()
-                    page_wer = CharErrorRate()
+                    page_wer = WordErrorRate()
 
                     lang_page_cer = defaultdict(CharErrorRate)
                     lang_page_wer = defaultdict(WordErrorRate)
