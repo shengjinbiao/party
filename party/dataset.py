@@ -524,13 +524,11 @@ class TestBaselineDataset(Dataset):
     def __init__(self,
                  files: Sequence[Union[str, 'PathLike']],
                  prompt_mode: Literal['boxes', 'curves'] = 'curves',
-                 add_lang_token: bool = False,
-                 batch_size: int = 32) -> None:
+                 add_lang_token: bool = False) -> None:
         super().__init__()
         self.files = files
         self.prompt_mode = prompt_mode
         self.add_lang_token = add_lang_token
-        self.batch_size = batch_size
         self.max_seq_len = 0
 
         self.arrow_table = None

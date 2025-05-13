@@ -15,7 +15,7 @@
 import json
 import logging
 import unicodedata
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple, Union
 
 from rich import print
 from rich.table import Table
@@ -71,6 +71,13 @@ def make_printable(char: str) -> str:
             return '0x{:x}'.format(ord(char))
 
 
+def _render_metric(metric: Union[float, str]) -> str:
+    if isinstance(metric, float):
+        return f'{metric:.2f}'
+    else:
+        return metric
+
+
 def render_report(model: str,
                   micro_cer: float,
                   micro_wer: float,
@@ -89,41 +96,69 @@ def render_report(model: str,
 
 
     """
-    table = Table(title=model, show_header=False)
-    for i in ['', 'CER', 'WER', 'CER (case insensitive)', 'WER (case insensitive)', 'CER (macro)', 'WER (macro)', 'CER (ci, macro)', 'WER (ci, macro)']:
+    print(f'Model: {model}')
+    table = Table(title='Global metrics', show_header=True, expand=True)
+    for i in ['CER', 'WER', 'CER (case insensitive)', 'WER (case insensitive)', 'CER (macro)', 'WER (macro)', 'CER (ci, macro)', 'WER (ci, macro)']:
         table.add_column(i, justify='left', no_wrap=True)
     lang_metrics = {}
-    macro_cer = 0
-    macro_wer = 0
-    macro_ci_cer = 0
-    macro_ci_wer = 0
-    for lang in per_lang_cer.keys():
-        la = (per_lang_cer[lang].compute(),
-              per_lang_wer[lang].compute(),
-              per_lang_ci_cer[lang].compute(),
-              per_lang_ci_wer[lang].compute())
-        macro_cer += la[0]
-        macro_wer += la[1]
-        macro_ci_cer += la[2]
-        macro_ci_wer += la[3]
-        lang_metrics[lang] = la
-    macro_cer /= len(lang_metrics)
-    macro_wer /= len(lang_metrics)
-    macro_ci_cer /= len(lang_metrics)
-    macro_ci_wer /= len(lang_metrics)
+    if len(per_lang_cer) > 0:
+        macro_cer = 0
+        macro_wer = 0
+        macro_ci_cer = 0
+        macro_ci_wer = 0
+        for lang in per_lang_cer.keys():
+            la = (per_lang_cer[lang],
+                  per_lang_wer[lang],
+                  per_lang_ci_cer[lang],
+                  per_lang_ci_wer[lang])
+            macro_cer += la[0]
+            macro_wer += la[1]
+            macro_ci_cer += la[2]
+            macro_ci_wer += la[3]
+            lang_metrics[lang] = la
+        macro_cer /= (len(lang_metrics) / 100.)
+        macro_wer /= (len(lang_metrics) / 100.)
+        macro_ci_cer /= (len(lang_metrics) / 100.)
+        macro_ci_wer /= (len(lang_metrics) / 100.)
+    else:
+        macro_cer = '-'
+        macro_wer = '-'
+        macro_ci_cer = '-'
+        macro_ci_wer = '-'
 
-    table.add_row('global', micro_cer, micro_wer, micro_ci_cer, micro_ci_wer, macro_cer, macro_wer, macro_ci_cer, macro_ci_wer, end_section=True)
-    table.add_row('Languages', end_section=True)
-    for lang, metrics in lang_metrics.items():
-        table.add_row(ISO_TO_LANG[lang], metrics[0], metrics[1], metrics[2], metrics[3], '-', '-', '-', '-')
-    table.end_section()
-    table.add_row('Scripts', end_section=True)
-    for script in per_script_cer.keys():
-        table.add_row(script, per_script_cer[script], per_script_ci_cer[script], '-', '-', '-', '-', '-', '-')
+    table.add_row(_render_metric(100*micro_cer),
+                  _render_metric(100*micro_wer),
+                  _render_metric(100*micro_ci_cer),
+                  _render_metric(100*micro_ci_wer),
+                  _render_metric(macro_cer),
+                  _render_metric(macro_wer),
+                  _render_metric(macro_ci_cer),
+                  _render_metric(macro_ci_wer))
+    print(table)
+
+    if len(per_lang_cer) > 0:
+        table = Table(title='Languages', show_header=True, expand=True)
+        for i in ['', 'CER', 'WER', 'CER (case insensitive)', 'WER (case insensitive)']:
+            table.add_column(i, justify='left', no_wrap=True)
+        for lang, metrics in sorted(lang_metrics.items(), key=lambda x: x[1]):
+
+            table.add_row(ISO_TO_LANG[lang].title(),
+                          _render_metric(100*metrics[0]),
+                          _render_metric(100*metrics[1]),
+                          _render_metric(100*metrics[2]),
+                          _render_metric(100*metrics[3]))
+        print(table)
+    table = Table(title='Scripts', show_header=True, expand=True)
+    for i in ['', 'CER', 'CER (case insensitive)']:
+        table.add_column(i, justify='left', no_wrap=True)
+    for script, _ in sorted(per_script_cer.items(), key=lambda x: x[1], reverse=True):
+        table.add_row(script,
+                      _render_metric((1.0-per_script_cer[script]) * 100),
+                      _render_metric((1.0-per_script_ci_cer[script]) * 100))
     print(table)
 
 
-def global_align(seq1: Sequence[Any], seq2: Sequence[Any]) -> Tuple[int, List[str], List[str]]:
+def global_align(seq1: Sequence[Any], seq2: Sequence[Any]) -> Tuple[List[str], List[str]]:
     """
     Computes a global alignment of two strings.
 
@@ -131,7 +166,7 @@ def global_align(seq1: Sequence[Any], seq2: Sequence[Any]) -> Tuple[int, List[st
         seq1 (Sequence[Any]):
         seq2 (Sequence[Any]):
 
-    Returns a tuple (distance, list(algn1), list(algn2))
+    Returns a tuple (list(algn1), list(algn2))
     """
     # calculate cost and direction matrix
     cost = [[0] * (len(seq2) + 1) for x in range(len(seq1) + 1)]
@@ -151,7 +186,6 @@ def global_align(seq1: Sequence[Any], seq2: Sequence[Any]) -> Tuple[int, List[st
             best = min(delcost, addcost, subcost, key=lambda x: x[1])
             cost[i][j] = best[1]
             direction[i][j] = best[0]
-    d = cost[-1][-1]
     # backtrace
     algn1: List[Any] = []
     algn2: List[Any] = []
@@ -169,7 +203,7 @@ def global_align(seq1: Sequence[Any], seq2: Sequence[Any]) -> Tuple[int, List[st
             algn1.insert(0, '')
             algn2.insert(0, seq2[j - 1])
         i, j = k, m
-    return d, algn1, algn2
+    return algn1, algn2
 
 
 def compute_script_cer_from_algn(algn1: Sequence[str], algn2: Sequence[str]) -> Dict[str, float]:

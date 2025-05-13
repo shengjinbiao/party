@@ -186,13 +186,13 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
                 doc = XMLPage(input_file)
                 im = Image.open(doc.imagename)
                 bounds = doc.to_container()
+                bounds.language = language
                 rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
                 predictor = batched_pred(model=model,
                                          im=im,
                                          bounds=bounds,
                                          fabric=fabric,
                                          prompt_mode=curves,
-                                         languages=language,
                                          batch_size=batch_size)
 
                 preds = []

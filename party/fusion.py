@@ -442,7 +442,7 @@ class PartyModel(nn.Module):
                                device: torch.device = torch.device('cpu')):
 
         if self.ready_for_generation:
-            logger.info('Model has already been prepared for generation!')
+            logger.debug('Model has already been prepared for generation!')
 
         self._batch_size = batch_size
         self._max_generated_tokens = max_generated_tokens
@@ -484,8 +484,7 @@ class PartyModel(nn.Module):
             raise ValueError('`curves` and `boxes` are mutually exclusive.')
         if curves is None and boxes is None:
             raise ValueError('One of `curves` or `boxes` needs to be set.')
-
-        logger.info('Computing encoder embeddings')
+        logger.debug('Computing encoder embeddings')
 
         encoder_hidden_states = self.forward_encoder_embeddings(encoder_input).repeat(self._batch_size, 1, 1)
         device = encoder_hidden_states.device
@@ -516,24 +515,25 @@ class PartyModel(nn.Module):
                                   device=device)
 
         for batch_idx, batch in enumerate(batches):
+
             bsz = batch.size(0)
 
             self.reset_caches()
 
             logger.info(f'Processing batch {batch_idx} of {len(batches)}')
             if bsz != self._batch_size:
-                logger.info(f'Resizing caches for last batch ({self._batch_size} -> {bsz})')
+                logger.debug(f'Resizing caches for last batch ({self._batch_size} -> {bsz})')
                 self.setup_caches(batch_size=bsz,
                                   encoder_max_seq_len=self._max_encoder_seq_len,
                                   decoder_max_seq_len=self._max_generated_tokens,
                                   dtype=next(self.encoder.parameters()).dtype)
 
-            logger.info('Adding line embeddings to encoder states.')
+            logger.debug('Adding line embeddings to encoder states.')
             # add line embeddings to encoder hidden states
             line_embeds = self.line_embedding(batch).unsqueeze(1).expand(-1, encoder_hidden_states.size(1), -1)
             exp_encoder_hidden_states = encoder_hidden_states[:bsz, ...] + line_embeds
 
-            logger.info('Prefilling cache.')
+            logger.debug('Prefilling cache.')
             # prefill step
             curr_masks = masks[:, :_prompt_length]
             logits = self.forward(tokens=_prompt[:bsz, ...],
@@ -545,7 +545,7 @@ class PartyModel(nn.Module):
             confs = logits[:, -1].softmax(-1)
             generated_tokens = [tokens[:, -1]]
             generated_confidences = [confs.gather(-1, tokens).squeeze(1)]
-            logger.info(f'Generated {generated_tokens[-1]} with conf {generated_confidences[-1]}')
+            logger.debug(f'Generated {generated_tokens[-1]} with conf {generated_confidences[-1]}')
             curr_pos = _prompt_length
 
             # keeps track of EOS tokens emitted by each sequence in a batch
@@ -558,8 +558,8 @@ class PartyModel(nn.Module):
             if eos_token_reached.all():
                 break
 
-            for _ in range(self._max_generated_tokens - 1):
-                logger.info('Generating...')
+            for _ in range(self._max_generated_tokens - (1 + _prompt_length)):
+                logger.debug('Generating...')
                 # update eos_token_mask if an EOS token was emitted in a previous step
                 eos_token_mask = torch.cat([eos_token_mask, ~eos_token_reached.reshape(bsz, 1)], dim=-1)
 
@@ -574,7 +574,7 @@ class PartyModel(nn.Module):
                 confs = logits[:, -1].softmax(-1)
                 generated_tokens.append(tokens[:, -1])
                 generated_confidences.append(confs.gather(-1, tokens).squeeze(1))
-                logger.info(f'Generated {generated_tokens[-1]} with conf {generated_confidences[-1]}')
+                logger.debug(f'Generated {generated_tokens[-1]} with conf {generated_confidences[-1]}')
 
                 curr_pos += 1
 

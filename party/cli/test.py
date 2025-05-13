@@ -82,7 +82,6 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
     import torch
 
-    from PIL import Image
     from htrmopo import get_model
     from collections import defaultdict
     from threadpoolctl import threadpool_limits
@@ -96,8 +95,8 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     from torchmetrics.text import CharErrorRate, WordErrorRate
 
     from party.fusion import PartyModel
-    from party.pred import batched_pred
-    from party.report  import render_report, global_align, compute_script_cer_from_algn
+    from party.pred import batched_test_pred
+    from party.report import render_report, global_align, compute_script_cer_from_algn
     from party.dataset import TestBaselineDataset
     torch.set_float32_matmul_precision('medium')
 
@@ -170,16 +169,15 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
             for sample in ds:
                 try:
                     rec_prog = progress.add_task('Processing sample')
-                    im = Image.open(sample[0])
+                    im = sample[0]
                     bounds = sample[1]
                     progress.update(rec_prog, total=len(bounds.lines))
-                    predictor = batched_pred(model=model,
-                                             im=im,
-                                             bounds=bounds,
-                                             fabric=fabric,
-                                             prompt_mode=curves,
-                                             batch_size=batch_size,
-                                             add_lang_token=add_lang_token)
+                    predictor = batched_test_pred(model=model,
+                                                  im=im,
+                                                  bounds=bounds,
+                                                  fabric=fabric,
+                                                  batch_size=batch_size,
+                                                  add_lang_token=add_lang_token)
 
                     for pred, line in zip(predictor, bounds.lines):
                         x = pred.prediction
@@ -195,25 +193,32 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                         micro_test_wer.update(x, y)
                         micro_test_ci_cer.update(x.lower(), y.lower())
                         micro_test_ci_wer.update(x.lower(), y.lower())
-                        for lang in bounds.language:
-                            per_lang_cer[lang].update(x, y)
-                            per_lang_wer[lang].update(x, y)
-                            per_lang_ci_cer[lang].update(x.lower(), y.lower())
-                            per_lang_ci_wer[lang].update(x.lower(), y.lower())
+                        if bounds.language:
+                            for lang in bounds.language:
+                                per_lang_cer[lang].update(x, y)
+                                per_lang_wer[lang].update(x, y)
+                                per_lang_ci_cer[lang].update(x.lower(), y.lower())
+                                per_lang_ci_wer[lang].update(x.lower(), y.lower())
                         progress.update(rec_prog, advance=1, total=len(bounds.lines))
                 except Exception:
+                    raise
                     logger.warning('Sample failed to process.')
                     progress.remove_task(rec_prog)
                 progress.update(file_prog, advance=1)
+
+        per_lang_cer = {k: float(v.compute()) for k, v in per_lang_cer.items()}
+        per_lang_wer = {k: float(v.compute()) for k, v in per_lang_wer.items()}
+        per_lang_ci_cer = {k: float(v.compute()) for k, v in per_lang_ci_cer.items()}
+        per_lang_ci_wer = {k: float(v.compute()) for k, v in per_lang_ci_wer.items()}
 
         per_script_cer = compute_script_cer_from_algn(algn_gt, algn_pred)
         per_script_ci_cer = compute_script_cer_from_algn(algn_ci_gt, algn_ci_pred)
 
         render_report(load_from_file,
-                      micro_test_cer,
-                      micro_test_wer,
-                      micro_test_ci_cer,
-                      micro_test_ci_wer,
+                      float(micro_test_cer.compute()),
+                      float(micro_test_wer.compute()),
+                      float(micro_test_ci_cer.compute()),
+                      float(micro_test_ci_wer.compute()),
                       per_lang_cer,
                       per_lang_wer,
                       per_lang_ci_cer,
