@@ -519,16 +519,13 @@ class TestBaselineDataset(Dataset):
         prompt_mode: Select line prompt sampling mode: `boxes` for bbox-only,
                      `curves` for curves-only, and `both` for randomly
                      switching between the two.
-        add_lang_tokens: Returns language tokens with the samples.
     """
     def __init__(self,
                  files: Sequence[Union[str, 'PathLike']],
-                 prompt_mode: Literal['boxes', 'curves'] = 'curves',
-                 add_lang_token: bool = False) -> None:
+                 prompt_mode: Literal['boxes', 'curves'] = 'curves') -> None:
         super().__init__()
         self.files = files
         self.prompt_mode = prompt_mode
-        self.add_lang_token = add_lang_token
         self.max_seq_len = 0
 
         self.arrow_table = None
@@ -567,7 +564,7 @@ class TestBaselineDataset(Dataset):
                                 script_detection=False,
                                 text_direction='horizontal-lr',
                                 lines=lines,
-                                language=[lang] if self.add_lang_token else [])
+                                language=[lang])
 
 
 # magic lsq cubic bezier fit function from the internet.
