@@ -122,8 +122,8 @@ def render_report(model: str,
                   _render_metric(100*micro_wer),
                   _render_metric(macro_cer),
                   _render_metric(macro_wer),
-                  _render_metric(page_macro_cer),
-                  _render_metric(page_macro_wer))
+                  _render_metric(100*page_macro_cer),
+                  _render_metric(100*page_macro_wer))
     print(table)
 
     if len(per_lang_cer) > 0:
