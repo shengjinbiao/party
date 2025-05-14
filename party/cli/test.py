@@ -86,15 +86,14 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     from collections import defaultdict
     from threadpoolctl import threadpool_limits
     from lightning.fabric import Fabric
-
-    from statistics import fmean
+    from torch.utils.data import DataLoader
 
     try:
         from kraken.lib.progress import KrakenProgressBar, KrakenDownloadProgressBar
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
 
-    from torchmetrics.text import CharErrorRate, WordErrorRate
+    from torchmetrics.text import CharErrorRate, WordErrorRate, MeanMetric
 
     from party.fusion import PartyModel
     from party.pred import batched_test_pred
@@ -130,6 +129,7 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
 
     ds = TestBaselineDataset(files=test_set,
                              prompt_mode=curves)
+    dl = DataLoader(ds, collate_fn=lambda x: x[0], num_workers=workers)
 
     with torch.inference_mode(), threadpool_limits(limits=ctx.meta['threads']), fabric.init_tensor(), fabric.init_module():
 
@@ -157,20 +157,20 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
         micro_test_cer = CharErrorRate()
         micro_test_wer = WordErrorRate()
 
-        page_macro_test_cer = []
-        page_macro_test_wer = []
+        page_macro_test_cer = MeanMetric()
+        page_macro_test_wer = MeanMetric()
 
         per_lang_micro_cer = defaultdict(CharErrorRate)
         per_lang_micro_wer = defaultdict(WordErrorRate)
 
-        per_lang_page_macro_cer = defaultdict(list)
-        per_lang_page_macro_wer = defaultdict(list)
+        per_lang_page_macro_cer = defaultdict(MeanMetric)
+        per_lang_page_macro_wer = defaultdict(MeanMetric)
 
-        per_script_page_macro_cer = defaultdict(list)
+        per_script_page_macro_cer = defaultdict(MeanMetric)
 
         with KrakenProgressBar() as progress:
             file_prog = progress.add_task('Files', total=len(ds))
-            for sample in ds:
+            for sample in dl:
                 try:
                     rec_prog = progress.add_task('Processing sample')
                     im = sample[0]
@@ -214,13 +214,13 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                     algn_pred.extend(page_algn_pred)
 
                     for k, v in compute_script_cer_from_algn(algn_gt, algn_pred).items():
-                        per_script_page_macro_cer[k].append(v)
+                        per_script_page_macro_cer[k].update(v)
 
                     for lang in lang_page_cer.keys():
-                        per_lang_page_macro_cer[lang].append(float(lang_page_cer[lang].compute()))
-                        per_lang_page_macro_wer[lang].append(float(lang_page_wer[lang].compute()))
-                    page_macro_test_cer.append(float(page_cer.compute()))
-                    page_macro_test_wer.append(float(page_wer.compute()))
+                        per_lang_page_macro_cer[lang].update(lang_page_cer[lang].compute())
+                        per_lang_page_macro_wer[lang].update(lang_page_wer[lang].compute())
+                    page_macro_test_cer.update(page_cer.compute())
+                    page_macro_test_wer.update(page_wer.compute())
                 except Exception:
                     raise
                     logger.warning('Sample failed to process.')
@@ -231,22 +231,19 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
         per_lang_micro_wer = {k: float(v.compute()) for k, v in per_lang_micro_wer.items()}
 
         for lang in per_lang_micro_cer.keys():
-            per_lang_page_macro_cer[lang] = fmean(per_lang_page_macro_cer[lang])
-            per_lang_page_macro_wer[lang] = fmean(per_lang_page_macro_wer[lang])
-
-        page_macro_test_cer = fmean(page_macro_test_cer)
-        page_macro_test_wer = fmean(page_macro_test_wer)
+            per_lang_page_macro_cer[lang] = float(per_lang_page_macro_cer[lang].compute())
+            per_lang_page_macro_wer[lang] = float(per_lang_page_macro_wer[lang].compute())
 
         per_script_cer = compute_script_cer_from_algn(algn_gt, algn_pred)
 
         for k, v in per_script_page_macro_cer.items():
-            per_script_page_macro_cer[k] = fmean(v)
+            per_script_page_macro_cer[k] = float(v.compute())
 
         render_report(load_from_file,
                       float(micro_test_cer.compute()),
                       float(micro_test_wer.compute()),
-                      page_macro_test_cer,
-                      page_macro_test_wer,
+                      float(page_macro_test_cer.compute()),
+                      float(page_macro_test_wer.compute()),
                       per_lang_micro_cer,
                       per_lang_micro_wer,
                       per_lang_page_macro_cer,
