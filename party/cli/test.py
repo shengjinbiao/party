@@ -93,7 +93,8 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
     except ImportError:
         raise click.UsageError('Inference requires the kraken package')
 
-    from torchmetrics.text import CharErrorRate, WordErrorRate, MeanMetric
+    from torchmetrics.text import CharErrorRate, WordErrorRate
+    from torchmetrics.aggregation import MeanMetric
 
     from party.fusion import PartyModel
     from party.pred import batched_test_pred
