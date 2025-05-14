@@ -223,8 +223,9 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                     page_macro_test_cer.update(page_cer.compute())
                     page_macro_test_wer.update(page_wer.compute())
                 except Exception:
-                    raise
                     logger.warning('Sample failed to process.')
+                finally:
+                    progress.update(rec_prog, visible=False)
                     progress.remove_task(rec_prog)
                 progress.update(file_prog, advance=1)
 
