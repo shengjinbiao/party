@@ -127,7 +127,7 @@ def render_report(model: str,
     print(table)
 
     if len(per_lang_cer) > 0:
-        table = Table(title='Languages', show_header=True, expand=True)
+        table = Table(title='Languages', show_header=True, box=box.MARKDOWN)
         for i in ['', 'CER', 'WER', 'CER (macro page)', 'WER (macro page)']:
             table.add_column(i, justify='left', no_wrap=True)
         for lang, metrics in sorted(lang_metrics.items(), key=lambda x: x[1]):
@@ -138,7 +138,7 @@ def render_report(model: str,
                           _render_metric(100*metrics[2]),
                           _render_metric(100*metrics[3]))
         print(table)
-    table = Table(title='Scripts', show_header=True, expand=True)
+    table = Table(title='Scripts', show_header=True, box=box.MARKDOWN)
     for i in ['', 'CER', 'CER (macro page)']:
         table.add_column(i, justify='left', no_wrap=True)
     for script, _ in sorted(per_script_cer.items(), key=lambda x: x[1], reverse=True):
