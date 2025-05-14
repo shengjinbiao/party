@@ -24,6 +24,7 @@ import logging
 
 from lxml import etree
 from pathlib import Path
+from collections import defaultdict
 
 from .util import to_ptl_device
 
@@ -34,8 +35,15 @@ logger = logging.getLogger('party')
 
 
 def _repl_alto(fname, preds):
+    from itertools import chain
+    langs = set(chain.from_iterable(pred.line.language if pred.line.language else [] for pred in preds))
     with open(fname, 'rb') as fp:
         doc = etree.parse(fp)
+        if langs:
+            page = doc.find('.//{*}Page')
+            page.set('LANG', langs.pop())
+            if langs:
+                page.set('OTHERLANGS', ' '.join(langs))
         lines = doc.findall('.//{*}TextLine')
         for line, pred in zip(lines, preds):
             # strip out previous recognition results
@@ -49,7 +57,29 @@ def _repl_alto(fname, preds):
             pred_el = etree.SubElement(line, 'String')
             pred_el.set('CONTENT', pred)
             pred_el.set('ID', str(uuid.uuid4()))
+            if pred.line.language:
+                pred_el.set('LANG', pred.line.language[0])
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
+
+
+def _parse_page_custom(s):
+    o = defaultdict(list)
+    s = s.strip()
+    l_chunks = [l_chunk for l_chunk in s.split('}') if l_chunk.strip()]
+    if l_chunks:
+        for chunk in l_chunks:
+            tag, vals = chunk.split('{')
+            tag_vals = {}
+            vals = [val.strip() for val in vals.split(';') if val.strip()]
+            for val in vals:
+                key, *val = val.split(':')
+                tag_vals[key] = ":".join(val)
+            o[tag.strip()].append(tag_vals)
+    return dict(o)
+
+
+def dict_to_page_custom(d) -> str:
+    return ' '.join((' '.join(f'{k} {{' + ';'.join(f'{m.strip()}: {n.strip()}' for m, n in i.items()) + ';}' for i in v)) for k, v in d.items())
 
 
 def _repl_page(fname, preds):
@@ -63,6 +93,12 @@ def _repl_page(fname, preds):
                     line.remove(el)
             pred_el = etree.SubElement(etree.SubElement(line, 'TextEquiv'), 'Unicode')
             pred_el.text = pred
+            # add language(s) to custom string
+            if pred.line.language:
+                custom_str = line.get('custom', '')
+                cs = _parse_page_custom(custom_str)
+                cs['language'] = [{'type': lang} for lang in pred.line.language]
+                line.set('custom', dict_to_page_custom(cs))
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
 
