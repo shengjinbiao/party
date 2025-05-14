@@ -225,7 +225,6 @@ def test(ctx, batch_size, load_from_repo, load_from_file, evaluation_files,
                 except Exception:
                     logger.warning('Sample failed to process.')
                 finally:
-                    progress.update(rec_prog, visible=False)
                     progress.remove_task(rec_prog)
                 progress.update(file_prog, advance=1)
 
