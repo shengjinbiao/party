@@ -17,7 +17,7 @@ import logging
 import unicodedata
 from typing import Any, Dict, List, Sequence, Tuple, Union
 
-from rich import print
+from rich import print, box
 from rich.table import Table
 from collections import Counter
 from importlib import resources
@@ -97,7 +97,7 @@ def render_report(model: str,
 
     """
     print(f'Model: {model}')
-    table = Table(title='Global metrics', show_header=True, expand=True)
+    table = Table(title='Global metrics', show_header=True, expand=False, box=box.MARKDOWN)
     for i in ['CER', 'WER', 'CER (macro lang)', 'WER (macro lang)', 'CER (macro page)', 'WER (macro page)']:
         table.add_column(i, justify='left', no_wrap=True)
     lang_metrics = {}
