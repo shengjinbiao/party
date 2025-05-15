@@ -206,8 +206,8 @@ class OctetTokenizer(object):
             A tuple containing the decoded text and any language tags in
             the input tensor.
         """
+        lang_ids = set(LANG_IDX_TO_ISO.get(int(id - LANG_OFFSET), 'und') for id in ids if id >= LANG_OFFSET)
         ids = [id - OFFSET for id in ids if OFFSET <= id < LANG_OFFSET]
-        lang_ids = set(LANG_IDX_TO_ISO.get(id - LANG_OFFSET, 'und') for id in ids if id >= LANG_OFFSET)
         text = bytes(ids).decode("utf-8", errors="ignore")
         return text, lang_ids
 
@@ -226,8 +226,8 @@ class OctetTokenizer(object):
             A tuple containing the decoded text, confidences for each code
             points, and any language tags in the input tensor.
         """
+        lang_ids = set(LANG_IDX_TO_ISO.get(int(id - LANG_OFFSET), 'und') for id in ids if id >= LANG_OFFSET)
         ids = [id - OFFSET for id in ids if OFFSET <= id < LANG_OFFSET]
-        lang_ids = set(LANG_IDX_TO_ISO.get(id - LANG_OFFSET, 'und') for id in ids if id >= LANG_OFFSET)
         decoder = codecs.getincrementaldecoder('utf-8')(errors='strict')
         cs = []
         confs = []
