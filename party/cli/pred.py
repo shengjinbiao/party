@@ -36,7 +36,7 @@ logger = logging.getLogger('party')
 
 def _repl_alto(fname, preds):
     from itertools import chain
-    langs = set(chain.from_iterable(pred.line.language if pred.line.language else [] for pred in preds))
+    langs = set(chain.from_iterable(pred.language if pred.language else [] for pred in preds))
     with open(fname, 'rb') as fp:
         doc = etree.parse(fp)
         if langs:
@@ -55,10 +55,10 @@ def _repl_alto(fname, preds):
                 elif el.tag.endswith('String'):
                     line.remove(el)
             pred_el = etree.SubElement(line, 'String')
-            pred_el.set('CONTENT', pred)
-            pred_el.set('ID', str(uuid.uuid4()))
-            if pred.line.language:
-                pred_el.set('LANG', pred.line.language[0])
+            pred_el.set('CONTENT', pred.prediction)
+            pred_el.set('ID', f'_{uuid.uuid4()}')
+            if pred.language:
+                pred_el.set('LANG', pred.language[0])
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
 
@@ -92,12 +92,12 @@ def _repl_page(fname, preds):
                 if el.tag.endswith('TextEquiv') or el.tag.endswith('Word'):
                     line.remove(el)
             pred_el = etree.SubElement(etree.SubElement(line, 'TextEquiv'), 'Unicode')
-            pred_el.text = pred
+            pred_el.text = pred.prediction
             # add language(s) to custom string
-            if pred.line.language:
+            if pred.language:
                 custom_str = line.get('custom', '')
                 cs = _parse_page_custom(custom_str)
-                cs['language'] = [{'type': lang} for lang in pred.line.language]
+                cs['language'] = [{'type': lang} for lang in pred.language]
                 line.set('custom', dict_to_page_custom(cs))
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
@@ -233,8 +233,8 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
 
                 preds = []
                 for pred in predictor:
-                    logger.info(f'pred: {pred}')
-                    preds.append(pred.prediction)
+                    logger.info(f'pred (lang: {pred.language}): {pred}')
+                    preds.append(pred)
                     progress.update(rec_prog, advance=1)
                 with open(output_file, 'wb') as fo:
                     if doc.filetype == 'alto':
