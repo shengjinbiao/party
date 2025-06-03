@@ -209,6 +209,7 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
             try:
                 import torchao
                 torchao.quantization.utils.recommended_inductor_config_setter()
+                model = torchao.autoquant(model)
                 click.secho('\u2713', fg='green')
             except Exception:
                 click.secho('\u2717', fg='red')
