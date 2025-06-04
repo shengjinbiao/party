@@ -190,12 +190,12 @@ class RecognitionModel(L.LightningModule):
         Loads weights from a huggingface hub repository.
         """
         from htrmopo import get_model
+        from safetensors.torch import load_file
 
         module = cls(*args, **kwargs, pretrained=False)
 
         model_path = get_model(id) / 'model.safetensors'
-
-        module.model = PartyModel.from_safetensors(model_path)
+        module.model.load_state_dict(load_file(model_path))
         module.model.train()
         return module
 
@@ -204,8 +204,10 @@ class RecognitionModel(L.LightningModule):
         """
         Loads weights from a huggingface hub repository.
         """
+        from safetensors.torch import load_file
+
         module = cls(*args, **kwargs, pretrained=False)
-        module.model = PartyModel.from_safetensors(file)
+        module.model.load_state_dict(load_file(file))
         module.model.train()
         return module
 
