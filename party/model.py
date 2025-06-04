@@ -113,6 +113,8 @@ class RecognitionModel(L.LightningModule):
         if freeze_encoder:
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
+            for param in self.model.adapter.parameters():
+                param.requires_grad = False
 
         self.model.train()
 
