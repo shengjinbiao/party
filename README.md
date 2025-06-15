@@ -4,6 +4,8 @@ party is **PA**ge-wise **R**ecognition of **T**ext-**y**. It is a replacement fo
 
 Party consists of a Swin vision transformer encoder, baseline positional embeddings, and a [tiny Llama decoder](https://github.com/mittagessen/bytellama) trained on octet tokenization.
 
+![party model functional block diagram](/images/party_diag.png)
+
 ## Metrics
 
 The base model has been pretrained on a very diverse collection of datasets in a dozen writing systems and even more languages, in addition to the language model decoder being trained on all 151 languages in the OSCAR corpus. No attempts have been made to adjust the frequency of particular data so character accuracy is fairly uneven across the corpus. 
