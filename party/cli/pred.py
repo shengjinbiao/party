@@ -28,7 +28,7 @@ from collections import defaultdict
 
 from .util import to_ptl_device
 
-from party.tokenizer import ISO_TO_IDX
+from party.tokenizer import ISO_TO_IDX, LANG_TO_ISO
 
 logging.captureWarnings(True)
 logger = logging.getLogger('party')
@@ -102,7 +102,11 @@ def _repl_page(fname, preds):
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
 
-@click.command('ocr')
+@click.command('ocr',
+               epilog=f"""
+                       Language codes known to party:
+                       {', '.join(' -> '.join((k, v)) for k, v in LANG_TO_ISO.items())}
+                       """)
 @click.pass_context
 @click.option('-i', '--input',
               type=(click.Path(exists=True, dir_okay=False, path_type=Path),  # type: ignore
@@ -124,7 +128,7 @@ def _repl_page(fname, preds):
 @click.option('--curves/--boxes', help='Encode line prompts as bounding boxes or curves', default=None, show_default=True)
 @click.option('-l', '--language', multiple=True, default=None,
               show_default=True, type=click.Choice(list(ISO_TO_IDX.keys())),
-              help='ISO693-3 code(s) for language(s) in input images.')
+              help='ISO639-3 code(s) for language(s) in input images.')
 @click.option('--compile/--no-compile', help='Switch to enable/disable torch.compile() on model', default=True, show_default=True)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
 @click.option('-b', '--batch-size', default=2, help='Set batch size in generator')
