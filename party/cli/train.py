@@ -24,6 +24,7 @@ import click
 from threadpoolctl import threadpool_limits
 
 from party.default_specs import RECOGNITION_HYPER_PARAMS
+from party.tokenizer import ISO_TO_LANG
 
 from .util import _expand_gt, _validate_manifests, message, to_ptl_device
 
@@ -59,7 +60,13 @@ def convert(ctx, output, model_card, checkpoint_path):
     message(f'Output file written to {output}')
 
 
-@click.command('compile')
+@click.command('compile',
+               epilog=f"""
+                       Language tags are determined by traversing the path of each XML file
+                       upwards until a component is found that matched one of the following
+                       identifiers:
+                       {', '.join(ISO_TO_LANG.values())}
+               """)
 @click.pass_context
 @click.option('-o', '--output', show_default=True, type=click.Path(), default='dataset.arrow', help='Output dataset file')
 @click.option('-F', '--files', show_default=True, default=None, multiple=True,
