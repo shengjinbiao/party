@@ -342,13 +342,17 @@ def train(ctx, load_from_checkpoint, load_from_safetensors, load_from_repo,
                       num_sanity_val_steps=0,
                       **val_check_interval)
 
-    with trainer.init_module():
+    with trainer.init_module(empty_init=True):
         if train_from_scratch:
             message('Initializing new model.')
             model = RecognitionModel(**hyper_params)
         elif load_from_checkpoint:
             message(f'Loading from checkpoint {load_from_checkpoint}.')
             model = RecognitionModel.load_from_checkpoint(load_from_checkpoint,
+                                                          **hyper_params)
+        elif load_from_safetensors:
+            message(f'Loading from safetensors {load_from_safetensors}.')
+            model = RecognitionModel.load_from_safetensors(load_from_safetensors,
                                                           **hyper_params)
         elif resume_from_checkpoint:
             message(f'Resuming from checkpoint {resume_from_checkpoint}.')

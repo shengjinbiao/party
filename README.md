@@ -4,29 +4,11 @@ party is **PA**ge-wise **R**ecognition of **T**ext-**y**. It is a replacement fo
 
 Party consists of a Swin vision transformer encoder, baseline positional embeddings, and a [tiny Llama decoder](https://github.com/mittagessen/bytellama) trained on octet tokenization.
 
-## Metrics
+![party model functional block diagram](/images/party_diag.png)
 
-The base model has been pretrained on a very diverse collection of datasets in a dozen writing systems and even more languages, in addition to the language model decoder being trained on all 151 languages in the OSCAR corpus. No attempts have been made to adjust the frequency of particular data so character accuracy is fairly uneven across the corpus. 
+The last iteration of party introduced language tokens to permit steering the model's output toward a specific language on a per-line level during inference. Their use is optional but recommended on difficult material to prevent random switching between languages. When no language tag is given the model will generate one or more tokens indicating which languages it thinks are contained in an individual line.
 
-The current base model's character accuracies on the validation set with curve and bounding box prompts (sorted by ascending curve error rate):
-
-| Script    | Code Points | %Right (curves) | %Right (boxes) |
-| :-------- | :---------- | :-------------- | :------------- |
-| Han       | 107416      | 98.90%          | 98.88%         |  
-| Hiragana  | 1868        | 97.11%          | 97.11%         |
-| Cyrillic  | 22239       | 92.70%          | 92.34%         |
-| Greek     | 1036        | 92.28%          | 91.31%         |
-| Katakana  | 390         | 90.00%          | 90.00%         |
-| Latin     | 199703      | 88.02%          | 86.98%         |
-| Common    | 85863       | 80.24%          | 79.28%         |
-| Arabic    | 18061       | 79.22%          | 79.64%         |
-| Hebrew    | 40182       | 73.98%          | 73.97%         |
-| Inherited | 2886        | 61.61%          | 60.95%         |
-| Unknown   | 202         | 58.42%          | 57.43%         |
-
-The script types are determined from the Unicode script property of each individual code point.
-
-The base model has been trained on Georgian, Syriac, Newa, Malayalam, and Devanagari, albeit with fairly small datasets. No pages with these scripts are contained in the validation sample.
+The new base model with language token support is currently embargoed but a model fine-tuned for a number of European languages is available [here](https://zenodo.org/records/15764161).
 
 While the model performs quite well on languages and scripts that are commonly found in the training data, **it is generally expected that it requires fine-tuning for practical use, in particular to ensure alignment with desired transcription guidelines.**
 
@@ -36,26 +18,27 @@ While the model performs quite well on languages and scripts that are commonly f
 
 ## Fine Tuning
 
-Party needs to be trained on datasets precompiled from PageXML or ALTO files containing line-wise transcriptions and baseline information for each line. The binary dataset format is **NOT** compatible with kraken but the process of compilation is fairly similar:
+Party needs to be trained on datasets precompiled from PageXML or ALTO files containing line-wise transcriptions and baseline information for each line. The binary dataset format is **NOT** compatible with kraken (and pre-language token datasets need to be recompiled) but the process of compilation is fairly similar:
 
         $ party compile -o dataset.arrow *.xml
 
+The current compilation code determines the language on a page level by traversing its path upward until a path component matches a known language identifier, e.g. `/english/path/to/german/dir/with/file.xml` would be assigned `German` as a language because of `german` being the first path component matching a language string in the absolute path. The help screen of `party compile` will print a list of known language identifiers. Files which cannot be assigned a known language will have the `undetermined` value assigned. New ones can be added in `party/tokenizer.py` on request. A better solution parsing out ALTO and PageXML language attributes on the line level is in the works. 
+
 To fine-tune the pretrained base model dataset files in listed in manifest files on all available GPUs:
 
-        $ party train --load-from-repo 10.5281/zenodo.15075344 --workers 32 -t train.lst -e val.lst
+        $ party train --load-from-repo 10.5281/zenodo.15764161 --workers 32 -t train.lst -e val.lst
 
 With the default parameters both baseline and bounding box prompts are randomly sampled from the training data. It is suggested that you fine-tune the model with uni-modal line embeddings by only selecting the line format that your segmentation method produces, i.e.:
 
-        $ party train --load-from-repo 10.5281/zenodo.15075344 -t train.lst -e val.lst --prompt-mode curves
+        $ party train --load-from-repo 10.5281/zenodo.15764161 -t train.lst -e val.lst --prompt-mode curves
 
 or:
 
-        $ party train --load-from-repo 10.5281/zenodo.15075344 -t train.lst -e val.lst --prompt-mode boxes
+        $ party train --load-from-repo 10.5281/zenodo.15764161 -t train.lst -e val.lst --prompt-mode boxes
 
 To continue training from an existing checkpoint:
 
         $ party train --load-from-checkpoint checkpoint_03-0.0640.ckpt -t train.lst -e val.lst
-
 
 ## Checkpoint conversion
 
@@ -69,9 +52,52 @@ Inference and teseting requires a working [kraken](https://kraken.re) installati
 
 To recognize text in pre-segmented page images in PageXML or ALTO with the pretrained model run:
 
-        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.15075344
+        $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.15764161 
 
 The paths to the image file(s) is automatically extracted from the XML input file(s).
+
+When no language tag is given the model will predict by itself which languages are found in it. To explicitly prompt the model to predict a particular language use one of the identifiers below:
+
+|Language|Identifier|
+|--------|----------|
+|Ancient Greek|grc|
+|Catalan|cat|
+|Church Slavonic|chu|
+|Corsican|cos|
+|Czech|ces|
+|Dutch|nld|
+|English|eng|
+|Finnish|fin|
+|French|fra|
+|German|deu|
+|German Shorthand|qaa|
+|Irish|gle|
+|Italian|ita|
+|Latin|lat|
+|Latvian|lav|
+|Lithuanian|lit|
+|Middle Dutch|dum|
+|Middle French|frm|
+|Newari|new|
+|Norwegian|nor|
+|Occitan|oci|
+|Persian|fas|
+|Picard|pcd|
+|Polish|pol|
+|Portuguese|por|
+|Romanian|ron|
+|Russian|rus|
+|Serbian (cyrillic)|qab|
+|Slovenian|slv|
+|Spanish|spa|
+|Swedish|swe|
+|Ukrainian|ukr|
+
+with the `-l` option of the `ocr` subcomand:
+
+    $ party -d cuda:0 ocr -i in.xml out.xml --load-from-repo 10.5281/zenodo.15764161 -l grc
+
+A single language can be defined per call.
 
 When the recognizer supports both curves and box prompts, curves are selected by default. To select a prompt type explicitly you can use the `--curves` and `--boxes` switches:
 
@@ -84,12 +110,12 @@ Inference from a converted checkpoint:
 
 ## Testing
 
-Testing for now only works from XML files. As with for inference curve prompts are selected if the model supports both, but an explicit line prompt type can be selected.
+Testing for now only works from binary dataset files. As with for inference curve prompts are selected if the model supports both, but an explicit line prompt type can be selected.
 
-        $  party -d cuda:0 test --curves --load-from-file arabic.safetensors  */*.xml
-        $  party -d cuda:0 test --boxes --load-from-file arabic.safetensors  */*.xml
-        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.15075344 */*.xml
-        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.15075344 */*.xml
+        $  party -d cuda:0 test --curves --load-from-file arabic.safetensors  */*.arrow
+        $  party -d cuda:0 test --boxes --load-from-file arabic.safetensors  */*.arrow
+        $  party -d cuda:0 test --curves --load-from-repo 10.5281/zenodo.15764161 */*.arrow
+        $  party -d cuda:0 test --boxes --load-from-repo 10.5281/zenodo.15764161 */*.arrow
 
 ## Performance
 

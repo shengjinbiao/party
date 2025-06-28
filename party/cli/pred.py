@@ -24,16 +24,26 @@ import logging
 
 from lxml import etree
 from pathlib import Path
+from collections import defaultdict
 
 from .util import to_ptl_device
+
+from party.tokenizer import ISO_TO_IDX
 
 logging.captureWarnings(True)
 logger = logging.getLogger('party')
 
 
 def _repl_alto(fname, preds):
+    from itertools import chain
+    langs = set(chain.from_iterable(pred.language if pred.language else [] for pred in preds))
     with open(fname, 'rb') as fp:
         doc = etree.parse(fp)
+        if langs:
+            page = doc.find('.//{*}Page')
+            page.set('LANG', langs.pop())
+            if langs:
+                page.set('OTHERLANGS', ' '.join(langs))
         lines = doc.findall('.//{*}TextLine')
         for line, pred in zip(lines, preds):
             # strip out previous recognition results
@@ -45,9 +55,31 @@ def _repl_alto(fname, preds):
                 elif el.tag.endswith('String'):
                     line.remove(el)
             pred_el = etree.SubElement(line, 'String')
-            pred_el.set('CONTENT', pred)
-            pred_el.set('ID', str(uuid.uuid4()))
+            pred_el.set('CONTENT', pred.prediction)
+            pred_el.set('ID', f'_{uuid.uuid4()}')
+            if pred.language:
+                pred_el.set('LANG', pred.language[0])
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
+
+
+def _parse_page_custom(s):
+    o = defaultdict(list)
+    s = s.strip()
+    l_chunks = [l_chunk for l_chunk in s.split('}') if l_chunk.strip()]
+    if l_chunks:
+        for chunk in l_chunks:
+            tag, vals = chunk.split('{')
+            tag_vals = {}
+            vals = [val.strip() for val in vals.split(';') if val.strip()]
+            for val in vals:
+                key, *val = val.split(':')
+                tag_vals[key] = ":".join(val)
+            o[tag.strip()].append(tag_vals)
+    return dict(o)
+
+
+def dict_to_page_custom(d) -> str:
+    return ' '.join((' '.join(f'{k} {{' + ';'.join(f'{m.strip()}: {n.strip()}' for m, n in i.items()) + ';}' for i in v)) for k, v in d.items())
 
 
 def _repl_page(fname, preds):
@@ -60,7 +92,13 @@ def _repl_page(fname, preds):
                 if el.tag.endswith('TextEquiv') or el.tag.endswith('Word'):
                     line.remove(el)
             pred_el = etree.SubElement(etree.SubElement(line, 'TextEquiv'), 'Unicode')
-            pred_el.text = pred
+            pred_el.text = pred.prediction
+            # add language(s) to custom string
+            if pred.language:
+                custom_str = line.get('custom', '')
+                cs = _parse_page_custom(custom_str)
+                cs['language'] = [{'type': lang} for lang in pred.language]
+                line.set('custom', dict_to_page_custom(cs))
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
 
@@ -84,11 +122,14 @@ def _repl_page(fname, preds):
               show_default=True,
               help="Path to the party model to evaluate")
 @click.option('--curves/--boxes', help='Encode line prompts as bounding boxes or curves', default=None, show_default=True)
+@click.option('-l', '--language', multiple=True, default=None,
+              show_default=True, type=click.Choice(list(ISO_TO_IDX.keys())),
+              help='ISO693-3 code(s) for language(s) in input images.')
 @click.option('--compile/--no-compile', help='Switch to enable/disable torch.compile() on model', default=True, show_default=True)
 @click.option('--quantize/--no-quantize', help='Switch to enable/disable PTQ', default=False, show_default=True)
 @click.option('-b', '--batch-size', default=2, help='Set batch size in generator')
 def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
-        curves, compile, quantize, batch_size):
+        curves, language, compile, quantize, batch_size):
     """
     Runs text recognition on pre-segmented images in XML format.
     """
@@ -168,6 +209,7 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
             try:
                 import torchao
                 torchao.quantization.utils.recommended_inductor_config_setter()
+                model = torchao.autoquant(model)
                 click.secho('\u2713', fg='green')
             except Exception:
                 click.secho('\u2717', fg='red')
@@ -181,6 +223,7 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
                 doc = XMLPage(input_file)
                 im = Image.open(doc.imagename)
                 bounds = doc.to_container()
+                bounds.language = language
                 rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
                 predictor = batched_pred(model=model,
                                          im=im,
@@ -191,8 +234,8 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
 
                 preds = []
                 for pred in predictor:
-                    logger.info(f'pred: {pred}')
-                    preds.append(pred.prediction)
+                    logger.info(f'pred (lang: {pred.language}): {pred}')
+                    preds.append(pred)
                     progress.update(rec_prog, advance=1)
                 with open(output_file, 'wb') as fo:
                     if doc.filetype == 'alto':

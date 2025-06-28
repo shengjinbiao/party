@@ -24,6 +24,7 @@ import lightning.pytorch as L
 import tempfile
 import pyarrow as pa
 
+from pathlib import Path
 from itertools import islice
 
 from torch.distributed import get_rank, get_world_size, is_initialized
@@ -40,10 +41,11 @@ from PIL import Image
 
 from scipy.special import comb
 
-from party.tokenizer import OctetTokenizer
+from party.tokenizer import OctetTokenizer, LANG_TO_ISO
 
 if TYPE_CHECKING:
     from os import PathLike
+    from kraken.containers import Segmentation
 
 __all__ = ['TextLineDataModule']
 
@@ -135,7 +137,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
     line_struct = pa.struct([('text', pa.string()),
                              ('curve', pa.list_(pa.float32())),
                              ('bbox', pa.list_(pa.float32()))])
-    page_struct = pa.struct([('im', pa.binary()), ('lines', pa.list_(line_struct))])
+    page_struct = pa.struct([('im', pa.binary()),
+                             ('lang', pa.string()),
+                             ('lines', pa.list_(line_struct))])
 
     tokenizer = OctetTokenizer()
 
@@ -171,6 +175,10 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                                 break
                             except Exception:
                                 continue
+                        # parse language by traversing path component
+                        for part in Path(file).parts[::-1]:
+                            if (lang := LANG_TO_ISO.get(part, 'und')) != 'und':
+                                break
                     except Exception:
                         continue
                     if im_path is None:
@@ -203,7 +211,9 @@ def compile(files: Optional[List[Union[str, 'PathLike']]] = None,
                     if len(page_data) > 1:
                         with open(im_path, 'rb') as fp:
                             im = fp.read()
-                        ar = pa.array([pa.scalar({'im': im, 'lines': page_data}, page_struct)], page_struct)
+                        ar = pa.array([pa.scalar({'im': im,
+                                                  'lang': lang,
+                                                  'lines': page_data}, page_struct)], page_struct)
                         writer.write(pa.RecordBatch.from_arrays([ar], schema=schema))
                         max_lines_in_page = max(len(page_data), max_lines_in_page)
                     callback(1, len(files))
@@ -368,7 +378,7 @@ class BinnedBaselineDataset(Dataset):
 
         item = self.arrow_table.column('pages')[idx].as_py()
         logger.debug(f'Attempting to load {item["im"]}')
-        im, page_data = item['im'], item['lines']
+        im, lang, page_data = item['im'], item['lang'], item['lines']
         try:
             im = Image.open(io.BytesIO(im)).convert('RGB')
         except Exception:
@@ -390,7 +400,7 @@ class BinnedBaselineDataset(Dataset):
             return_boxes = False
         for x in rng.choice(len(page_data), self.batch_size, replace=True, shuffle=False):
             line = page_data[x]
-            tokens = torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32)
+            tokens = torch.tensor(self.tokenizer.encode(line['text'], langs=[lang], add_bos=True, add_eos=True), dtype=torch.int32)
             curve = torch.tensor(line['curve']).view(4, 2) if not return_boxes else None
             bbox = torch.tensor(line['bbox']).view(4, 2) if return_boxes else None
             sample.append((tokens, curve, bbox))
@@ -459,7 +469,7 @@ class ValidationBaselineDataset(IterableDataset):
         for item in self.arrow_table.column('pages')[replica_rank::num_replicas]:
             item = item.as_py()
             logger.debug(f'Attempting to load {item["im"]}')
-            im, page_data = item['im'], item['lines']
+            im, lang, page_data = item['im'], item['lang'], item['lines']
             im = Image.open(io.BytesIO(im)).convert('RGB')
             im = self.transforms(im)
             if self.aug:
@@ -488,7 +498,7 @@ class ValidationBaselineDataset(IterableDataset):
                         curves.append(torch.tensor(line['curve']).view(4, 2))
                     if return_boxes:
                         boxes.append(torch.tensor(line['bbox']).view(4, 2))
-                    tokens.append(torch.tensor(self.tokenizer.encode(line['text'], add_bos=True, add_eos=True), dtype=torch.int32))
+                    tokens.append(torch.tensor(self.tokenizer.encode(line['text'], langs=[lang], add_bos=True, add_eos=True), dtype=torch.int32))
 
                 tokens = torch.stack([F.pad(x, pad=(0, self.max_seq_len-len(x)), value=-100) for x in tokens]).long()
                 boxes = torch.stack(boxes) if len(boxes) else None
@@ -497,6 +507,64 @@ class ValidationBaselineDataset(IterableDataset):
                        'boxes': boxes,
                        'curves': curves,
                        'tokens': tokens}
+
+
+class TestBaselineDataset(Dataset):
+    """
+    Dataset for validation.
+
+    Args:
+        im_transforms: Function taking an PIL.Image and returning a tensor
+                       suitable for forward passes.
+        prompt_mode: Select line prompt sampling mode: `boxes` for bbox-only,
+                     `curves` for curves-only, and `both` for randomly
+                     switching between the two.
+    """
+    def __init__(self,
+                 files: Sequence[Union[str, 'PathLike']],
+                 prompt_mode: Literal['boxes', 'curves'] = 'curves') -> None:
+        super().__init__()
+        self.files = files
+        self.prompt_mode = prompt_mode
+        self.max_seq_len = 0
+
+        self.arrow_table = None
+
+        for file in files:
+            with pa.memory_map(file, 'rb') as source:
+                ds_table = pa.ipc.open_file(source).read_all()
+                raw_metadata = ds_table.schema.metadata
+                if not raw_metadata or b'num_lines' not in raw_metadata:
+                    raise ValueError(f'{file} does not contain a valid metadata record.')
+                if not self.arrow_table:
+                    self.arrow_table = ds_table
+                else:
+                    self.arrow_table = pa.concat_tables([self.arrow_table, ds_table])
+                self.max_seq_len = max(int.from_bytes(raw_metadata[b'max_octets_in_line'], 'little'), self.max_seq_len)
+
+    def __len__(self):
+        return len(self.arrow_table)
+
+    def __getitem__(self, index: int) -> Tuple[Image.Image, 'Segmentation']:
+        from kraken.containers import Segmentation, BaselineLine, BBoxLine
+
+        item = self.arrow_table.column('pages')[index].as_py()
+        im, lang, page_data = item['im'], item['lang'], item['lines']
+        im = Image.open(io.BytesIO(im)).convert('RGB')
+
+        if self.prompt_mode == 'curves':
+            lines = [BaselineLine(id='_foo',
+                                  baseline=line['curve'],
+                                  boundary=[],
+                                  text=line['text']) for line in page_data]
+        elif self.prompt_mode == 'boxes':
+            lines = [BBoxLine(id='_foo', bbox=line['bbox'], text=line['text']) for line in page_data]
+        return im, Segmentation(type=lines[0].type,
+                                imagename='default.jpg',
+                                script_detection=False,
+                                text_direction='horizontal-lr',
+                                lines=lines,
+                                language=[lang])
 
 
 # magic lsq cubic bezier fit function from the internet.

@@ -113,6 +113,8 @@ class RecognitionModel(L.LightningModule):
         if freeze_encoder:
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
+            for param in self.model.adapter.parameters():
+                param.requires_grad = False
 
         self.model.train()
 
@@ -188,12 +190,24 @@ class RecognitionModel(L.LightningModule):
         Loads weights from a huggingface hub repository.
         """
         from htrmopo import get_model
+        from safetensors.torch import load_file
 
         module = cls(*args, **kwargs, pretrained=False)
 
         model_path = get_model(id) / 'model.safetensors'
+        module.model.load_state_dict(load_file(model_path))
+        module.model.train()
+        return module
 
-        module.model = PartyModel.from_safetensors(model_path)
+    @classmethod
+    def load_from_safetensors(cls, file=None, *args, **kwargs):
+        """
+        Loads weights from a huggingface hub repository.
+        """
+        from safetensors.torch import load_file
+
+        module = cls(*args, **kwargs, pretrained=False)
+        module.model.load_state_dict(load_file(file))
         module.model.train()
         return module
 

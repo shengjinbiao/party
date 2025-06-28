@@ -21,7 +21,7 @@ API for inference
 import torch
 import logging
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from kraken.containers import BBoxOCRRecord, BaselineOCRRecord, BBoxLine
 
@@ -71,6 +71,88 @@ def _baseline_to_bbox(line: 'BaselineLine') -> 'BBoxLine':
     return BBoxLine(**d)
 
 
+class batched_test_pred(object):
+    """
+    Batched single-model prediction with a generative model (for test)
+
+    Args:
+        model: PartyModel for generation.
+        im: Pillow image
+        bounds: Segmentation for input image
+        fabric: Fabric context manager to cast models and tensors.
+        prompt_mode: How to embed line positional prompts. Per default prompts
+                     are determined by the segmentation type if the model
+                     indicates either curves or boxes are supported. If the
+                     model supports only boxes and the input segmentation is
+                     baseline-type, bounding boxes will be generated from the
+                     bounding polygon if available. If the model expects curves
+                     and the segmentation is of bounding box-type an exception
+                     will be raised. If explicit values are set.
+        batch_size: Number of lines to predict in parallel
+        add_lang_token: Adds language tokens taken from the page level
+                        `Segmentation` language field.
+
+    Yields:
+        An ocr_record containing the recognized text, dummy character
+        positions, and confidence values for each character.
+
+    Raises:
+        ValueError when the model expects curves and the segmentation of bounding box-type.
+    """
+    def __init__(self,
+                 model: 'PartyModel',
+                 im: 'Image.Image',
+                 bounds: 'Segmentation',
+                 fabric: 'Fabric',
+                 batch_size: int = 2,
+                 add_lang_token: bool = True) -> Generator['ocr_record', None, None]:
+        self.prompt_mode = bounds.type
+
+        m_dtype = next(model.parameters()).dtype
+        m_device = next(model.parameters()).device
+
+        # load image transforms
+        im_transforms = get_default_transforms(dtype=m_dtype)
+
+        # prepare model for generation
+        model.prepare_for_generation(batch_size=batch_size, device=m_device)
+        model = model.eval()
+
+        with fabric.init_tensor(), torch.inference_mode():
+            image_input = im_transforms(im).unsqueeze(0).to(m_device)
+            lines = torch.tensor([line.bbox if line.type == 'bbox' else line.baseline for line in bounds.lines])
+            lines = lines.view(-1, 4, 2).to(m_device)
+            self.len = len(lines)
+
+            self._pred = zip(model.predict_string(encoder_input=image_input,
+                                                  curves=lines if self.prompt_mode == 'baselines' else None,
+                                                  boxes=lines if self.prompt_mode == 'bbox' else None,
+                                                  languages=bounds.language if add_lang_token else None),
+                             bounds.lines)
+
+    def __next__(self):
+        (pred_text, pred_confs, pred_langs), line = next(self._pred)
+        line = replace(line, language=pred_langs)
+        if self.prompt_mode == 'baselines':
+            return BaselineOCRRecord(prediction=pred_text,
+                                     cuts=tuple(),
+                                     confidences=pred_confs,
+                                     line=line,
+                                     display_order=False)
+        else:
+            return BBoxOCRRecord(prediction=pred_text,
+                                 cuts=tuple(),
+                                 confidences=pred_confs,
+                                 line=_baseline_to_bbox(line) if not isinstance(line, BBoxLine) else line,
+                                 display_order=False)
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.len
+
+
 class batched_pred(object):
     """
     Batched single-model prediction with a generative model.
@@ -89,6 +171,8 @@ class batched_pred(object):
                      and the segmentation is of bounding box-type an exception
                      will be raised. If explicit values are set.
         batch_size: Number of lines to predict in parallel
+        add_lang_token: Adds language tokens taken from the page level
+                        `Segmentation` language field.
 
     Yields:
         An ocr_record containing the recognized text, dummy character
@@ -103,7 +187,8 @@ class batched_pred(object):
                  bounds: 'Segmentation',
                  fabric: 'Fabric',
                  prompt_mode: Optional[Literal['curves', 'boxes']] = None,
-                 batch_size: int = 2) -> Generator['ocr_record', None, None]:
+                 batch_size: int = 2,
+                 add_lang_token: bool = True) -> Generator['ocr_record', None, None]:
         m_prompt_mode = model.line_prompt_mode
         s_prompt_mode = bounds.type
 
@@ -145,22 +230,24 @@ class batched_pred(object):
 
             self._pred = zip(model.predict_string(encoder_input=image_input,
                                                   curves=lines if self.prompt_mode == 'curves' else None,
-                                                  boxes=lines if self.prompt_mode == 'boxes' else None),
+                                                  boxes=lines if self.prompt_mode == 'boxes' else None,
+                                                  languages=bounds.language if add_lang_token else None),
                              bounds.lines)
 
     def __next__(self):
-        pred_str, line = next(self._pred)
+        (pred_text, pred_confs, pred_langs), line = next(self._pred)
+        line = replace(line, language=pred_langs)
         if self.prompt_mode == 'curves':
-            return BaselineOCRRecord(prediction=pred_str,
+            return BaselineOCRRecord(prediction=pred_text,
                                      cuts=tuple(),
-                                     confidences=tuple(),
+                                     confidences=pred_confs,
                                      line=line,
                                      display_order=False)
         else:
-            return BBoxOCRRecord(prediction=pred_str,
+            return BBoxOCRRecord(prediction=pred_text,
                                  cuts=tuple(),
-                                 confidences=tuple(),
-                                 line=_baseline_to_bbox(line),
+                                 confidences=pred_confs,
+                                 line=_baseline_to_bbox(line) if not isinstance(line, BBoxLine) else line,
                                  display_order=False)
 
     def __iter__(self):
