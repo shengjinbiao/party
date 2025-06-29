@@ -104,8 +104,9 @@ def _repl_page(fname, preds):
 
 @click.command('ocr',
                epilog=f"""
-                       Language codes known to party:
-                       {', '.join(' -> '.join((k, v)) for k, v in LANG_TO_ISO.items())}
+\b
+Language codes known to party:
+{'\n'.join(' -> '.join((k.replace("_", " ").title(), v)) for k, v in LANG_TO_ISO.items())}
                        """)
 @click.pass_context
 @click.option('-i', '--input',
