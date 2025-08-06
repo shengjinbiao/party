@@ -173,8 +173,9 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
     if load_from_repo:
         with KrakenDownloadProgressBar() as progress:
             download_task = progress.add_task(f'Downloading {load_from_repo}', total=0, visible=True)
-            load_from_file = get_model(load_from_repo,
-                                       callback=lambda total, advance: progress.update(download_task, total=total, advance=advance)) / 'model.safetensors'
+            p = get_model(load_from_repo,
+                          callback=lambda total, advance: progress.update(download_task, total=total, advance=advance))
+            load_from_file = next(p.glob('*.safetensors'))
 
     if curves is True:
         curves = 'curves'
