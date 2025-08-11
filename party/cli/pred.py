@@ -227,7 +227,7 @@ def ocr(ctx, input, batch_input, suffix, load_from_repo, load_from_file,
                 output_file = Path(output_file)
 
                 doc = XMLPage(input_file)
-                im = Image.open(doc.imagename)
+                im = Image.open(doc.imagename).convert('RGB')
                 bounds = doc.to_container()
                 bounds.language = language
                 rec_prog = progress.add_task(f'Processing {input_file}', total=len(bounds.lines))
