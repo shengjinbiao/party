@@ -58,7 +58,7 @@ def _repl_alto(fname, preds):
             pred_el.set('CONTENT', pred.prediction)
             pred_el.set('ID', f'_{uuid.uuid4()}')
             if pred.language:
-                pred_el.set('LANG', pred.language[0])
+                pred_el.set('LANG', pred.language.pop())
     return etree.tostring(doc, encoding='UTF-8', xml_declaration=True)
 
 
