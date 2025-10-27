@@ -1,0 +1,353 @@
+CHANGES
+=======
+
+* force input images to RGB mode in inference
+* pop random language from lang tags in alto pred
+* correctly load decoder parameters from config file
+* just make kraken a normal dependency
+* Add kraken optional requirement
+* Loads safetensors file from repo even when not named 'model.safetensors'
+* Put torch requirement in line with kraken 5.x
+* nicer formatting for lang id in help texts
+* Also print language identifiers in ocr help screen
+* print language identifiers in party compile help text
+* Update readme for released european lang weights
+* Add party model diagram
+* Load model weights without reconstructing module
+* initialize model on meta device
+* also freeze adapter when freezing encoder
+* make quantize option actually quantize
+* correct serialization of lang in pred
+* correctly decode lang ids in tokenizer
+* Serialize language(s) into prediction
+* forgot to change table style for all tables
+* superfluous call to update()
+* Remove finished sample progress bar
+* Use markdown table format in test output
+* import meanmetric from right place
+* Use dataloader in test sample loading
+* correct macro page wer calc
+* scale global macro page metrics
+* remove CI metrics, add macro page metrics
+* Fix loading from safetensors
+* compute language statistics even when not adding language token
+* working \`party test\`
+* correct call to render\_report()
+* add scripts.json
+* urrgh
+* arrgh
+* correct imports
+* testing from arrow dataset
+* Working inference with confidence scores
+* wip inference with lang tokens
+* Add classical armenian to language token list
+* update file line total before first prediction
+* clear progress bar in test of failed files
+* catch all exceptions in test loop
+* correctly construct prompt
+* correct path traversal
+* Add crude lang token determination in test
+* Set validation batch size to train batch size
+* Set validation batch size to train batch size
+* Add new langs to tokenizer
+* Add predicted language(s) in inference output
+* fix in tokenizer type
+* rename greek to ancient\_greek
+* cli driver for pred with (optional) lang token
+* inference with language tokens
+* resize token embeddings to new codec size
+* more arrgh
+* arg typo
+* argh
+* compute embedding size
+* training with lang tokens
+* update lang map in tokenizer
+* add language field in compiled dataset
+* Add lang tokens to tokenizer
+* resume from checkpoint
+* cubic not quadratic
+* Update Zenodo Repository in train.py
+* Correct model on repo
+* Update DOI for newest model version
+* Update readme for new base model
+* kwargs in decoder
+* add validate-before-train switch to cli
+* precision warning in cli
+* swin with compilation
+* Revert "make torch compile work in DDP"
+* Some small cleanups
+* make torch compile work in DDP
+* forgot some params in cli
+* remove useless hyperparameter switches
+* small precision update in README
+* pop correct prefix from model weights in converter
+* disable inductor for now
+* Do not run sanity checks
+* Make compilation work with bf16-mixed
+* Do not use compiled model for validation
+* remove validation pred
+* hopefully more memory-efficient validation dataloader
+* arrgh
+* Use iterabledataset in validation
+* chunk batches in validation step
+* Pad tokens
+* forgot to initialize tokenizer
+* Do not compute validation metrics
+* bump up batch size in validation
+* create kv\_cache on device
+* Do not log val\_metric
+* use distributed sampler in training
+* typo in delete\_cache(s)()
+* Add delete\_caches() function
+* small fix
+* on epoch train loss
+* cer/wer in validation
+* Page-wise validation dataset
+* models aren't iterators anymore in torch 2.6
+* get rid of tiedlinear
+* Untie embeddings/lm head weights
+* add option for training from scratch
+* save \*last\* 10 checkpoints not first 10
+* No need to use distributed sampler with our dataset
+* run validation before train
+* set weight decay
+* add layer-based learning rate decay
+* correct example in readme
+* Make jpeg xl plugin optional
+* freeze encoder per default in tune
+* use 8 bit adam per default
+* more regularization options
+* add label smoothing to training
+* fix model pulling from repository in cli drivers
+* Some reformatting
+* make readme markdown
+* Revert "urrgh rst tables"
+* urrgh rst tables
+* Add some notes regarding metrics
+* fix crash when loading from hub in trainer
+* screwed up lr setter condition
+* syntax error
+* make optimizers expecting tensor/float lrs work
+* add encoder freezing and low precision optimizers
+* docs and model loading switch unification
+* add load\_from\_repo/load\_from\_file to pred
+* loading from repo in trainer
+* syntax error
+* Set default repo model inside driver
+* load from repo option in train
+* forgot to delete threads
+* Skip unparseable files in test
+* and another duplicate option
+* remove duplicate device option
+* no markdown yet
+* Nicer report printing
+* aargh
+* forgot import
+* make box inference work
+* Generation fixes for tests
+* move tensors to proper device
+* add test command
+* arrgh
+* add prompt mode option to tuner
+* some small tuner tunes
+* needs to be a format string
+* Add htrmopo to requirements
+* load from repo not hf
+* add checkpoint to model conversion routine
+* allow resizing of caches
+* Add support for new serialization format
+* Linting
+* preparation for padding-less generation
+* remove confusing output about model improvement
+* min mode in validation loss tracking
+* move prompt encoder to modules
+* Revert "make lr change with ao adamw work"
+* small fix in dataset
+* Produce ocr\_record classes in predictor
+* Move prediction out of cli driver into separate module
+* forgot closing paranthesis
+* Tokenize data in dataset instead of compilation
+* Better readme
+* Use Mars optimizer per default
+* make lr change with ao adamw work
+* Revert "Revert "use torchao AdamW""
+* Revert "use torchao AdamW"
+* use torchao AdamW
+* fix dataset compilation
+* remove one more option
+* remove BiDi reordering switch to prevent accidental stupidity
+* Add box/curve prompt selector switch to train
+* Revert "uni-modal prompt encoder"
+* Revert "disable boxes in dataset"
+* Remove checkpoint loading state dict adapter
+* A bit of inference refactoring
+* fix model card table
+* Fix inference on GPU
+* Set correct device on prompts
+* fix imports
+* proper deps
+* steal code for llama decoder from torchtune
+* model card template
+* First draft of model card and its metadata schema
+* make pagexml writer actually set prediction as output
+* Pin torch to 2.5.x
+* fix loading from checkpoint
+* precision of inference instructions in readme
+* update readme
+* Add fine-tuning from hub
+* Even nicer whitespacing
+* nicer typesetting
+* Flesh out readme
+* Add prediction serialization
+* Inference code
+* Add string prediction to model
+* Add production weight loader for PartyModel
+* Disable last block of swin encoder
+* WIP draft of generation code
+* never call init on dataset
+* Shut up lightning warning about distributed metrics
+* Use default torch.compile options
+* shuffle things around
+* replace ignore\_idx tokens in prompt
+* more precise precision
+* only import shapely when compiling
+* install albumentations per default
+* do not import removed cli drivers
+* fix dependencies
+* typo in deps
+* refactor code to only depends on kraken for ds compilation
+* more fixes
+* instantiate proper decoder
+* typing
+* use oscar pretrained bytellama
+* add deps
+* some refactoring the model constructors
+* set correct batch size in log
+* Resize model to better fill A40s
+* more generalizable shape stuff
+* we use targets not labels
+* proper shape
+* torch.full takes a tuple
+* more stupidity
+* instantiate adapter with embedding\_dim not num\_embeddings
+* typo
+* Make curve embeddings work
+* s/targets/tokens
+* Get rid of T5 and use Llama decoder with byte embeddings
+* no dict anymore
+* back to vit from mambaout
+* factor out model
+* limit max line token length in dataset compilation
+* Fixed batch sizes for more efficient compilation
+* DDP compatibility
+* disable caching during training
+* add label shifting to t5pretrainedmodel
+* syntax error
+* Use T5 with SDPA attention
+* inherit from generationmixin
+* import pillow jpeg-xl plugin in dataset
+* s/vit/mambaout
+* use vit and torch.compile
+* forgot s
+* fix encoder instantiation
+* make augmentation work
+* various syntax errors
+* do not log sanity checking loss
+* do not use visionencoderdecodermodel
+* use torchvision transforms again
+* wrong check
+* faster path abort in compilation
+* argh
+* more reverts
+* image format picker code in dataset compilation
+* Correct loss tracking modes
+* correct eos token replacement
+* decoder stuff
+* uni-modal prompt encoder
+* disable boxes in dataset
+* change back to ByT5 decoder
+* Change dataset and codec back to T5 format
+* Prefer jpeg-xl encoded images over whatever is the path in the xml
+* Enable auto-selection of acceleration devices
+* skip unloadable images
+* increase image decompression bomb detection limits
+* parse poppler xml output instead of pdfminer
+* Revert to padding to longest sequence
+* arrgh
+* fix bbox func
+* instantiate encoder-decoder from blocks
+* fix faster attention implementations
+* update pdfminer script
+* remove longest\_edge parameter
+* actually pad to max sequence length
+* make everything static
+* import default\_specs in pdfminer script
+* update pdfminer script for new codec
+* syntax error
+* take max\_side\_length from default spec in pdfminer parser
+* rename max\_side\_length to longest\_edge
+* Use standard IDs for BOS/EOS
+* cross attention dims and remove internal loss calc
+* explicitly instantiate encoderdecodercache in decoder
+* forgot to call init
+* forgot to add encoder attention layernorm
+* boolean logic is hard
+* Revert "make sure encoder\_hidden\_states are given to decoder"
+* make sure encoder\_hidden\_states are given to decoder
+* Forgot to give encoder\_hidden\_state to decoder
+* Check for encoder state + curves/boxes
+* Change model instantiation in decoder for encoder decoder class
+* set decoder\_start\_token\_id
+* fix imports
+* import codec
+* Replace T5 decoder by Mistral
+* factor out prompt encoder from decoder
+* arrgh
+* Put PromptEncoder point embeddings in single layer
+* Correct number of lines in pdfminer dataset
+* dimensions in collate\_sequences
+* fix prompt encoder
+* fix compilation
+* load model from partially pre-trained weights
+* remove unused params from model
+* parser for pdfminer output
+* Use boxes in lightning model
+* Embedding/decoder support for bbox line
+* Randomly sample boxes or baselines from dataset
+* serialize bounding boxes into binarized dataset
+* Revert "Compute CER/WER validation metrics"
+* Enable augmentation per default again
+* augmentation without pixel translation
+* Args
+* Compute CER/WER validation metrics
+* Load model directly onto device
+* Also skip exceptions in line parsing
+* Catch parser exceptions
+* syntax error
+* Add gradient clipping
+* make gradient accumulation configurable
+* play around with hyperparameters
+* convert to RGB later
+* Make sure images are RGB
+* argh
+* urrgh
+* Allow multiple dataset files
+* add resizing back to datamodule
+* remove unnecessary options on train
+* Allow multiple devices in device option
+* more informative progress bar
+* Fix reserialization
+* foo
+* do not cache complete dataset in memory
+* Change to pre-compilation/tokenization of datasets
+* I'm an idiot
+* Pad with -100 in collator
+* remove freeze-encoder option
+* foo
+* arrgh
+* Arg rename of curves in decoder
+* and pad\_token\_id
+* Correctly set decoder\_start\_token\_id in model
+* some small fixes
+* Fix cli drivers
+* Initial commit

@@ -1,0 +1,11 @@
+party_env/
+*.mlmodel
+*.ckpt
+*.arrow
+*.safetensors
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+train/Chinese/
+*.lst
+*.arrow

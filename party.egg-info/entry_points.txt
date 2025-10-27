@@ -1,0 +1,3 @@
+[console_scripts]
+party = party.cli:cli
+party_tune = party.tune:cli

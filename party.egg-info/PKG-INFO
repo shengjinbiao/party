@@ -1,3 +1,47 @@
+Metadata-Version: 2.4
+Name: party
+Version: 0.0.1.dev351
+Summary: foo
+Home-page: http://kraken.re
+Author: Benjamin Kiessling
+Author-email: mittagessen@l.unchti.me
+License: Apache
+Keywords: htr
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: <3.13,>=3.9
+Description-Content-Type: text/markdown; charset=UTF-8
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: torch>=2.5.0
+Requires-Dist: timm
+Requires-Dist: pillow-jxl-plugin
+Requires-Dist: python-bidi
+Requires-Dist: click
+Requires-Dist: rich
+Requires-Dist: threadpoolctl
+Requires-Dist: lightning
+Requires-Dist: albumentations
+Requires-Dist: lxml
+Requires-Dist: pyarrow
+Requires-Dist: htrmopo>=0.3,~=0.3
+Requires-Dist: kraken@ git+https://github.com/mittagessen/kraken.git@348ff35
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: summary
+
 # party
 
 party is **PA**ge-wise **R**ecognition of **T**ext-**y**. It is a replacement for conventional text recognizers in ATR system using conventional baseline+bounding polygon (where it eliminates the need for bounding polygons) and bounding box line data models. 

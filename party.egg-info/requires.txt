@@ -1,0 +1,13 @@
+torch>=2.5.0
+timm
+pillow-jxl-plugin
+python-bidi
+click
+rich
+threadpoolctl
+lightning
+albumentations
+lxml
+pyarrow
+htrmopo>=0.3,~=0.3
+kraken@ git+https://github.com/mittagessen/kraken.git@348ff35
